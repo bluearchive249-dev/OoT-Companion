@@ -444,12 +444,16 @@ enum LineKind {
     L_PROMPT,
     L_HUG,
     L_HUG_SEEN,
+    L_HOLD,
+    L_LET_GO,
+    L_LOOKED_AT,
     L_KIND_COUNT
 };
 static const char* sKindKey[L_KIND_COUNT] = { "enter",  "idle",     "low_health", "cheer",    "boss",     "night",
                                               "attack", "hurt",     "ko",         "revive",   "support",  "chat",
                                               "talk",   "key_here", "key_near",   "key_none", "key_held", "dungeon",
-                                              "water",  "wait",     "prompt",     "hug",      "hug_seen" };
+                                              "water",  "wait",     "prompt",     "hug",      "hug_seen", "hold",
+                                              "let_go", "looked_at" };
 
 typedef std::vector<std::string> Lines;
 static Lines sLines[P_COUNT][L_KIND_COUNT];
@@ -765,6 +769,34 @@ static void BuildLines() {
           "I'll remember this, whatever comes next." });
     Add(P_ZELDA_A, L_HUG_SEEN, { "They both deserve that.", "How lovely." });
 
+    // Hand in hand, letting go, and being looked at in first person
+    Add(P_SARIA, L_HOLD, { "Hee hee, just like when we'd run through the woods!", "Don't let go, okay?" });
+    Add(P_SARIA, L_LET_GO, { "Okay! I'll be right here.", "Aww... alright." });
+    Add(P_SARIA, L_LOOKED_AT,
+        { "Yes, Link? What is it?", "Hee hee, why are you staring?", "Do I have a leaf in my hair?" });
+    Add(P_RUTO_Y, L_HOLD, { "Finally! A proper escort for a princess.", "Hold tight. And don't you dare let go." });
+    Add(P_RUTO_Y, L_LET_GO, { "Hmph! Fine!", "...I wasn't enjoying it anyway." });
+    Add(P_RUTO_Y, L_LOOKED_AT,
+        { "What? Is there something on my face?", "Like what you see, fiancé?",
+          "Stop staring, it's rude! ...Okay, a little longer." });
+    Add(P_RUTO_A, L_HOLD, { "Lead the way, Link.", "Mm. Your hands are warm." });
+    Add(P_RUTO_A, L_LET_GO, { "Very well.", "Until next time, then." });
+    Add(P_RUTO_A, L_LOOKED_AT, { "Yes, Link? What is it?", "Admiring the Sage of Water, are we?" });
+    Add(P_MALON_Y, L_HOLD, { "Yay! Let's skip!", "Hee hee, your hand's all sweaty, fairy boy!" });
+    Add(P_MALON_Y, L_LET_GO, { "Okay!", "Aww, already?" });
+    Add(P_MALON_Y, L_LOOKED_AT, { "Fairy boy? Whatcha looking at?", "Hee hee! Hi!", "Is there a cucco on my head?" });
+    Add(P_MALON_A, L_HOLD, { "Oh... alright. Lead the way.", "Like walking Epona back to the stable." });
+    Add(P_MALON_A, L_LET_GO, { "Okay, Link.", "Thanks for the walk." });
+    Add(P_MALON_A, L_LOOKED_AT,
+        { "Yes, Link? What is it?", "Something wrong?", "Hm? Do I have hay in my hair again?" });
+    Add(P_ZELDA_Y, L_HOLD, { "Oh! ...Alright. Just don't tell Impa.", "Your hand is so warm." });
+    Add(P_ZELDA_Y, L_LET_GO, { "Of course.", "Thank you, Link." });
+    Add(P_ZELDA_Y, L_LOOKED_AT,
+        { "Yes, Link? What is it?", "Is something the matter?", "You're looking at me like in my dream..." });
+    Add(P_ZELDA_A, L_HOLD, { "Together, then.", "I won't let go this time." });
+    Add(P_ZELDA_A, L_LET_GO, { "Alright.", "I'm still with you." });
+    Add(P_ZELDA_A, L_LOOKED_AT, { "Yes, Link? What is it?", "Is something on your mind?" });
+
     // Places
     AddScene(SCENE_KOKIRI_FOREST, P_SARIA, { "Home... it looks smaller now, doesn't it?" });
     AddScene(SCENE_KOKIRI_FOREST, P_RUTO_Y, { "So THIS is where you grew up? Everything's so tiny!" });
@@ -931,6 +963,9 @@ typedef struct {
     s16 hp;
     s16 stillTimer, stuckTimer, waitSaid;
     u8 catchingUp, wandering;
+    s8 holdSide; // holding Link's hand: 1 at his right, -1 at his left, 0 not
+    s16 lookedCooldown, lookedFrames;
+    f32 holdWalk;
     s16 wanderTimer;
     Vec3f wanderGoal;
     f32 legPhase;
@@ -1089,7 +1124,7 @@ static bool ActorExists(PlayState* play, Actor* a) {
     if (a == nullptr) {
         return false;
     }
-    for (int cat : { ACTORCAT_ENEMY, ACTORCAT_BOSS }) {
+    for (int cat : { ACTORCAT_ENEMY, ACTORCAT_BOSS, ACTORCAT_MISC, ACTORCAT_NPC }) {
         for (Actor* e = play->actorCtx.actorLists[cat].head; e != nullptr; e = e->next) {
             if (e == a) {
                 return true;
@@ -1099,11 +1134,27 @@ static bool ActorExists(PlayState* play, Actor* a) {
     return false;
 }
 
+// Everything in the game's enemy and boss lists, whether or not it can be Z-targeted right now, and the enemies the
+// game files elsewhere: Leevers (misc) and Skullwalltulas (with the NPCs; not the gold ones, those are Link's)
+static bool ExtraEnemy(Actor* e) {
+    if (e->id == ACTOR_EN_REEBA) {
+        return true;
+    }
+    if (e->id == ACTOR_EN_SW) {
+        return ((e->params & 0xE000) >> 0xD) == 0;
+    }
+    return false;
+}
+
 static bool Fightable(Actor* e) {
-    return (e->update != nullptr) &&
-           ((e->flags & (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE)) ==
-            (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE)) &&
-           (e->colChkInfo.health > 0) && (e->draw != nullptr);
+    if ((e->update == nullptr) || (e->draw == nullptr) || (e->colChkInfo.health <= 0)) {
+        return false;
+    }
+    if ((e->category == ACTORCAT_ENEMY) || (e->category == ACTORCAT_BOSS)) {
+        return true;
+    }
+    // (a Leever under the sand isn't one to shoot at: only while it's up and hostile)
+    return ExtraEnemy(e) && (e->flags & ACTOR_FLAG_HOSTILE);
 }
 
 static Actor* FindTarget(PlayState* play, Comp* c) {
@@ -1113,7 +1164,7 @@ static Actor* FindTarget(PlayState* play, Comp* c) {
     Actor* best = nullptr;
     f32 bestD = 1e9f;
 
-    for (int cat : { ACTORCAT_ENEMY, ACTORCAT_BOSS }) {
+    for (int cat : { ACTORCAT_ENEMY, ACTORCAT_BOSS, ACTORCAT_MISC, ACTORCAT_NPC }) {
         for (Actor* e = play->actorCtx.actorLists[cat].head; e != nullptr; e = e->next) {
             if (!Fightable(e)) {
                 continue;
@@ -1605,6 +1656,80 @@ static bool ThinkFight(PlayState* play, Comp* c, Player* player) {
     return false;
 }
 
+// ---- Holding hands ----
+
+static void ToggleHold(PlayState* play, Comp* c, Player* player) {
+    if (c->holdSide != 0) {
+        c->holdSide = 0;
+        SayKind(c->who, L_LET_GO);
+        return;
+    }
+    // His right hand first, then his left (two can hold on)
+    bool rightTaken = false, leftTaken = false;
+    for (int i = 0; i < COMP_COUNT; i++) {
+        if ((sComp[i] != nullptr) && (sComp[i] != c)) {
+            rightTaken |= (sComp[i]->holdSide == 1);
+            leftTaken |= (sComp[i]->holdSide == -1);
+        }
+    }
+    if (rightTaken && leftTaken) {
+        // (both his hands are full: the one who's held longest lets go)
+        for (int i = 0; i < COMP_COUNT; i++) {
+            if ((sComp[i] != nullptr) && (sComp[i] != c) && (sComp[i]->holdSide == 1)) {
+                sComp[i]->holdSide = 0;
+            }
+        }
+        rightTaken = false;
+    }
+    c->holdSide = rightTaken ? -1 : 1;
+    c->catchingUp = 0;
+    c->wandering = 0;
+    SayKind(c->who, L_HOLD);
+    Voice(&c->actor, Def(c).voiceHappy);
+}
+
+static Vec3f HoldPos(Comp* c, Player* player) {
+    s16 yaw = player->actor.shape.rot.y;
+    f32 side = Tune(c->adult ? "hold_distance_adult" : "hold_distance_child", c->adult ? 26.0f : 22.0f);
+    Vec3f p = player->actor.world.pos;
+    // (at his side, his right is -x of his facing)
+    p.x -= Math_CosS(yaw) * side * (f32)c->holdSide;
+    p.z += Math_SinS(yaw) * side * (f32)c->holdSide;
+    p.x -= Math_SinS(yaw) * Tune("hold_behind", 3.0f);
+    p.z -= Math_CosS(yaw) * Tune("hold_behind", 3.0f);
+    return p;
+}
+
+// Walking hand in hand: right at his side, facing where he faces, at his pace. She lets go when he leaves the
+// ground for long, swims, climbs, or gets pulled away from her
+static bool FollowHolding(PlayState* play, Comp* c, Player* player) {
+    if (c->holdSide == 0) {
+        return false;
+    }
+    Vec3f goal = HoldPos(c, player);
+    f32 dist = Math_Vec3f_DistXZ(&c->actor.world.pos, &goal);
+    if (LinkSwimming(player) ||
+        (player->stateFlags1 & (PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_HANGING_OFF_LEDGE)) ||
+        (dist > Tune("hold_break_distance", 140.0f)) ||
+        (fabsf(player->actor.world.pos.y - c->actor.world.pos.y) > 60.0f)) {
+        c->holdSide = 0;
+        SayKind(c->who, L_LET_GO);
+        return false;
+    }
+    // Moves the gap each frame (and no more), so she keeps step with him
+    s16 toGoal = Math_Vec3f_Yaw(&c->actor.world.pos, &goal);
+    c->actor.world.rot.y = toGoal;
+    c->actor.speedXZ = CLAMP(dist, 0.0f, std::max(player->actor.speedXZ + 3.0f, 8.0f));
+    if (dist < 1.0f) {
+        c->actor.speedXZ = 0.0f;
+    }
+    Math_SmoothStepToS(&c->actor.shape.rot.y, player->actor.shape.rot.y, 3, 0x1800, 0x100);
+    // (her walk is from his speed, not from these little steps)
+    c->holdWalk = player->actor.speedXZ;
+    SetAnim(c, Def(c).idle, 1.0f, ANIMMODE_LOOP, -6.0f);
+    return true;
+}
+
 // How far from Link she lets herself be before she goes to him (each a little different)
 static f32 Leash(Comp* c) {
     return Tune("leash", 230.0f) + (f32)c->formation * Tune("leash_step", 30.0f);
@@ -1644,10 +1769,14 @@ static bool PickWanderSpot(PlayState* play, Comp* c, Player* player) {
 
 static void Follow(PlayState* play, Comp* c, Player* player) {
     const PersonaDef& d = Def(c);
+    c->holdWalk = -1.0f;
+    if (FollowHolding(play, c, player)) {
+        return;
+    }
     f32 toLink = Actor_WorldDistXZToActor(&c->actor, &player->actor);
     bool waitAtShore = LinkSwimming(player) && (d.swim == nullptr);
     f32 leash = Leash(c);
-    f32 near = Tune("catch_up_distance", 80.0f) + (f32)c->formation * 18.0f;
+    f32 nearDist = Tune("catch_up_distance", 80.0f) + (f32)c->formation * 18.0f;
 
     c->swimming = (d.swim != nullptr) && (c->actor.bgCheckFlags & BGCHECKFLAG_WATER) && (c->actor.yDistToWater > 30.0f);
 
@@ -1681,9 +1810,9 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
     if (c->catchingUp && !waitAtShore) {
         s16 fromLink = Math_Vec3f_Yaw(&player->actor.world.pos, &c->actor.world.pos);
         goal = player->actor.world.pos;
-        goal.x += Math_SinS(fromLink) * near;
-        goal.z += Math_CosS(fromLink) * near;
-        if (toLink < near + 25.0f) {
+        goal.x += Math_SinS(fromLink) * nearDist;
+        goal.z += Math_CosS(fromLink) * nearDist;
+        if (toLink < nearDist + 25.0f) {
             c->catchingUp = 0;
             c->wanderTimer = Rand_S16Offset(40, 80);
         } else if (toLink > leash * 1.6f) {
@@ -1970,10 +2099,13 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
                 if (play->msgCtx.choiceIndex == 0) {
                     c->talkStage = 1;
                     Message_ContinueTextbox(play, COMP_TEXT_ID);
-                } else {
+                } else if (play->msgCtx.choiceIndex == 1) {
                     Message_CloseTextbox(play);
                     StartHug(play, c, player);
                     break;
+                } else {
+                    Message_CloseTextbox(play);
+                    ToggleHold(play, c, player);
                 }
             }
             if ((--c->timer <= 0) && (play->msgCtx.msgMode == MSGMODE_NONE)) {
@@ -2022,19 +2154,21 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
 
     // Link's walk: his hidden skeleton walks or runs at her speed
     if (c->linkWalk) {
+        // (hand in hand she walks at his pace)
+        f32 moveSpeed = ((c->holdSide != 0) && (c->holdWalk >= 0.0f)) ? c->holdWalk : fabsf(c->actor.speedXZ);
         bool walking = CVarGetInteger(COMP_CVAR("LinkWalk"), 1) && !c->swimming && (c->state != ST_KO) &&
-                       (c->state != ST_HUG) && (fabsf(c->actor.speedXZ) > 0.8f);
+                       (c->state != ST_HUG) && (moveSpeed > 0.8f);
         Math_ApproachF(&c->walkAmount, walking ? 1.0f : 0.0f, 0.35f, 0.12f);
         if (c->walkAmount > 0.0f) {
-            const char* want = (c->actor.speedXZ > Tune("run_above", 4.2f)) ? LINK_RUN : LINK_WALK;
+            const char* want = (moveSpeed > Tune("run_above", 4.2f)) ? LINK_RUN : LINK_WALK;
             if (want != c->puppetAnim) {
                 c->puppetAnim = want;
                 LinkAnimation_Change(play, &c->puppet, (LinkAnimationHeader*)want, 1.0f, 0.0f,
                                      (f32)Animation_GetLastFrame((void*)want), ANIMMODE_LOOP, -6.0f);
             }
-            c->puppet.playSpeed = CLAMP(fabsf(c->actor.speedXZ) * ((want == LINK_RUN) ? Tune("run_anim_rate", 0.22f)
-                                                                                      : Tune("walk_anim_rate", 0.45f)),
-                                        0.5f, 2.0f);
+            c->puppet.playSpeed =
+                CLAMP(moveSpeed * ((want == LINK_RUN) ? Tune("run_anim_rate", 0.22f) : Tune("walk_anim_rate", 0.45f)),
+                      0.5f, 2.0f);
             LinkAnimation_Update(play, &c->puppet);
         }
         // (the standing pose, read once its frame is in)
@@ -2107,6 +2241,31 @@ static s32 Comp_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Ve
             rot->x = (s16)(rot->x + (s16)((f32)(s16)(a.x - b.x) * mix * sign));
             rot->y = (s16)(rot->y + (s16)((f32)(s16)(a.y - b.y) * mix * sign));
             rot->z = (s16)(rot->z + (s16)((f32)(s16)(a.z - b.z) * mix * sign));
+        }
+    }
+    // Hand in hand: the arm on his side reaches to him (degrees in companion_tuning.json: "companion.hold_arm_left"
+    // / "companion.hold_arm_right" [x, y, z], "companion.<persona>.hold_arm_left" for one of them)
+    if ((c->holdSide != 0) && (c->state == ST_FOLLOW)) {
+        // At his right, his hand is on her left
+        bool left = (c->holdSide == 1);
+        int shoulder = (int)CompTuneAt((std::string("companion.") + sPersonaKey[c->persona] + ".walk_map").c_str(),
+                                       left ? 6 : 8, sWalkMap[c->persona][left ? 6 : 8]);
+        if ((shoulder != 0) && (limbIndex == shoulder)) {
+            std::string k =
+                std::string("companion.") + sPersonaKey[c->persona] + (left ? ".hold_arm_left" : ".hold_arm_right");
+            std::string g = left ? "companion.hold_arm_left" : "companion.hold_arm_right";
+            for (int ax = 0; ax < 3; ax++) {
+                f32 deg =
+                    CompTuneAt(k.c_str(), ax, CompTuneAt(g.c_str(), ax, (ax == 2) ? (left ? 25.0f : -25.0f) : 0.0f));
+                s16 add = (s16)(deg * (65536.0f / 360.0f));
+                if (ax == 0) {
+                    rot->x = (s16)(rot->x + add);
+                } else if (ax == 1) {
+                    rot->y = (s16)(rot->y + add);
+                } else {
+                    rot->z = (s16)(rot->z + add);
+                }
+            }
         }
     }
     // Adult Zelda's hair hangs from her head in seven pieces (as in the castle escape, at rest)
@@ -2214,7 +2373,7 @@ static void OnOpenText(uint16_t* textId, bool* loadFromMessageTable) {
                     head + line;
     if (prompt) {
         // (one short box, then the two choices)
-        t += "\x1B&%gTalk&Hug%w";
+        t += (c->holdSide != 0) ? "\x1C&%gTalk&Hug&Let go%w" : "\x1C&%gTalk&Hug&Hold hands%w";
     }
     CustomMessage msg = CustomMessage(t, TEXTBOX_TYPE_BLACK, TEXTBOX_POS_BOTTOM);
     msg.AutoFormat();
@@ -2488,6 +2647,41 @@ static void OnFrame() {
         }
         if (w >= 0) {
             KeyTip(play, w);
+        }
+    }
+
+    // Link looking at one of them in first person (C-Up): she notices
+    for (int i = 0; i < COMP_COUNT; i++) {
+        Comp* c = sComp[i];
+        if (c == nullptr) {
+            continue;
+        }
+        if (c->lookedCooldown > 0) {
+            c->lookedCooldown--;
+        }
+        Camera* cam = GET_ACTIVE_CAM(play);
+        bool looking = false;
+        if ((player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) && (cam != nullptr) && !c->hidden &&
+            (c->state != ST_KO)) {
+            Vec3f dir = { cam->at.x - cam->eye.x, cam->at.y - cam->eye.y, cam->at.z - cam->eye.z };
+            Vec3f head = c->actor.focus.pos;
+            Vec3f to = { head.x - cam->eye.x, head.y - cam->eye.y, head.z - cam->eye.z };
+            f32 dl = sqrtf(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+            f32 tl = sqrtf(to.x * to.x + to.y * to.y + to.z * to.z);
+            if ((dl > 0.01f) && (tl > 0.01f) && (tl < Tune("look_distance", 800.0f))) {
+                f32 cosA = (dir.x * to.x + dir.y * to.y + dir.z * to.z) / (dl * tl);
+                // (within a few degrees, a little wider up close)
+                looking = cosA > cosf(fminf(0.35f, Tune("look_angle", 7.0f) * 0.01745f * (1.0f + 120.0f / tl)));
+            }
+        }
+        c->lookedFrames = looking ? (s16)(c->lookedFrames + 1) : 0;
+        if ((c->lookedFrames == (s16)Tune("look_frames", 8.0f)) && (c->lookedCooldown == 0)) {
+            c->lookedCooldown = (s16)(Tune("look_cooldown_seconds", 6.0f) * COMP_FPS);
+            SayKind(i, L_LOOKED_AT);
+            if ((c->state == ST_FOLLOW) && (c->holdSide == 0)) {
+                Emote(c, Def(c).wave, 30, -1);
+            }
+            c->actor.shape.rot.y = c->actor.world.rot.y = c->actor.yawTowardsPlayer;
         }
     }
 

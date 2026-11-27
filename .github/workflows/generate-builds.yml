@@ -85,7 +85,7 @@ jobs:
       run: |
         # The job logs aren't always reachable, so the compiler errors also go into an annotation
         if [ -f build.log ]; then
-          msg=$(grep -E -i -A4 "error|undefined reference|unresolved external|FAILED:" build.log | grep -v -i "werror\|-Wno-error" | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          msg=$(awk 'length($0) < 600' build.log | grep -E -i -A3 ": (fatal )?error|error C[0-9]+|undefined reference|unresolved external" | grep -v -i "werror\|-Wno-error" | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
           echo "::error title=Build errors::${msg}"
         fi
     - name: Upload build
@@ -194,7 +194,7 @@ jobs:
       run: |
         # The job logs aren't always reachable, so the compiler errors also go into an annotation
         if [ -f build.log ]; then
-          msg=$(grep -E -i -A4 "error|undefined reference|unresolved external|FAILED:" build.log | grep -v -i "werror\|-Wno-error" | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          msg=$(awk 'length($0) < 600' build.log | grep -E -i -A3 ": (fatal )?error|error C[0-9]+|undefined reference|unresolved external" | grep -v -i "werror\|-Wno-error" | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
           echo "::error title=Build errors::${msg}"
         fi
     - name: Upload build
@@ -289,7 +289,7 @@ jobs:
       run: |
         # The job logs aren't always reachable, so the compiler errors also go into an annotation
         if [ -f build.log ]; then
-          msg=$(grep -E -i -A4 "error|undefined reference|unresolved external|FAILED:" build.log | grep -v -i "werror\|-Wno-error" | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          msg=$(awk 'length($0) < 600' build.log | grep -E -i -A3 ": (fatal )?error|error C[0-9]+|undefined reference|unresolved external" | grep -v -i "werror\|-Wno-error" | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
           echo "::error title=Build errors::${msg}"
         fi
     - name: Unzip package
