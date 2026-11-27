@@ -2002,10 +2002,18 @@ static void Emote(Comp* c, const char* anim, s16 frames, s16 eye) {
 
 // ---- Hugs ----
 
+// During a hug the right stick turns the camera freely (the game's free look, switched on just for the hug)
+static s8 sHugFreeLookWas = -1;
+
 static void EndHug(PlayState* play, Comp* c) {
     if (sHugWho == c->who) {
         sHugWho = -1;
         Player_SetCsAction(play, nullptr, PLAYER_CSACTION_7); // (he's free again)
+        if (sHugFreeLookWas == 0) {
+            CVarSetInteger(CVAR_SETTING("FreeLook.Enabled"), 0);
+            play->manualCamera = false;
+        }
+        sHugFreeLookWas = -1;
     }
     c->state = ST_FOLLOW;
     c->eyeOverride = -1;
@@ -2014,14 +2022,18 @@ static void EndHug(PlayState* play, Comp* c) {
 
 static void StartHug(PlayState* play, Comp* c, Player* player) {
     c->state = ST_HUG;
-    c->timer = (s16)(Tune("hug_seconds", 3.5f) * COMP_FPS);
+    c->timer = 0; // (frames into the hug: it lasts until he lets go)
+    if (sHugFreeLookWas < 0) {
+        sHugFreeLookWas = (s8)CVarGetInteger(CVAR_SETTING("FreeLook.Enabled"), 0);
+        CVarSetInteger(CVAR_SETTING("FreeLook.Enabled"), 1);
+    }
     c->actor.speedXZ = 0.0f;
     c->mouthTimer = 0;
     sHugWho = c->who;
 
     // Face to face, close
     s16 yaw = Math_Vec3f_Yaw(&player->actor.world.pos, &c->actor.world.pos);
-    f32 dist = c->adult ? Tune("hug_distance_adult", 24.0f) : Tune("hug_distance_child", 20.0f);
+    f32 dist = c->adult ? Tune("hug_distance_adult", 13.0f) : Tune("hug_distance_child", 11.0f);
     c->actor.world.pos.x = player->actor.world.pos.x + Math_SinS(yaw) * dist;
     c->actor.world.pos.z = player->actor.world.pos.z + Math_CosS(yaw) * dist;
     c->actor.world.pos.y = player->actor.world.pos.y;
@@ -2057,11 +2069,12 @@ static void UpdateHug(PlayState* play, Comp* c, Player* player) {
         if (player->skelAnime.animation != (LinkAnimationHeader*)a) {
             LinkAnimation_PlayLoop(play, &player->skelAnime, (LinkAnimationHeader*)a);
         }
-    } else if (c->timer < (s16)(Tune("hug_seconds", 3.5f) * COMP_FPS) - 3) {
+    } else if (c->timer > 3) {
         Player_SetCsAction(play, nullptr, PLAYER_CSACTION_93);
     }
     // Sparkles over them
-    if ((c->timer % 5) == 0) {
+    c->timer = (s16)MIN(c->timer + 1, 30000);
+    if ((c->timer % 8) == 0) {
         Vec3f p = c->actor.world.pos;
         p.x = (p.x + player->actor.world.pos.x) * 0.5f + Rand_CenteredFloat(20.0f);
         p.z = (p.z + player->actor.world.pos.z) * 0.5f + Rand_CenteredFloat(20.0f);
@@ -2070,7 +2083,9 @@ static void UpdateHug(PlayState* play, Comp* c, Player* player) {
         Vec3f accel = { 0.0f, 0.05f, 0.0f };
         EffectSsKiraKira_SpawnSmallYellow(play, &p, &vel, &accel);
     }
-    if (--c->timer <= 0) {
+    // It lasts until he lets go: A or B (after a moment, so the press that chose Hug doesn't end it)
+    u16 press = play->state.input[0].press.button;
+    if ((c->timer > 15) && (CHECK_BTN_ANY(press, BTN_A | BTN_B))) {
         EndHug(play, c);
     }
 }
@@ -2190,10 +2205,10 @@ static const float sHugDirs[8][3] = { { 0, 0, 0 },
                                       { 0, 0, 0 },
                                       { 0, 0, 0 },
                                       { 0, 0, 0 },
-                                      { 0.45f, -0.2f, 0.87f },
-                                      { -0.85f, 0.05f, 0.55f },
-                                      { -0.45f, -0.2f, 0.87f },
-                                      { 0.85f, 0.05f, 0.55f } };
+                                      { 0.4f, -0.15f, 0.9f },
+                                      { -0.95f, 0.05f, 0.3f },
+                                      { -0.4f, -0.15f, 0.9f },
+                                      { 0.95f, 0.05f, 0.3f } };
 static const bool sHugUse[8] = { false, false, false, false, true, true, true, true };
 
 // A point in the world, in an actor's model frame (its units, before its scale)
