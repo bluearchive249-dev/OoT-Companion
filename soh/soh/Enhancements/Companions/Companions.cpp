@@ -2674,6 +2674,56 @@ static bool PickWanderSpot(PlayState* play, Comp* c, Player* player) {
     return false;
 }
 
+// Running to Link together: each gets her own spot in a fan on the side they come from (spread by where each is
+// now, left to right), so they don't all make for the same point in a line
+static s16 FanYaw(Comp* c, Player* player) {
+    f32 sx = 0.0f, sz = 0.0f;
+    std::vector<std::pair<s16, int>> who;
+    for (int i = 0; i < COMP_COUNT; i++) {
+        Comp* o = sComp[i];
+        if ((o == nullptr) || o->hidden || (o->state == ST_KO) || (o->holdSide != 0)) {
+            continue;
+        }
+        s16 y = Math_Vec3f_Yaw(&player->actor.world.pos, &o->actor.world.pos);
+        sx += Math_SinS(y);
+        sz += Math_CosS(y);
+        who.push_back({ y, i });
+    }
+    s16 mid = (sx == 0.0f && sz == 0.0f) ? Math_Vec3f_Yaw(&player->actor.world.pos, &c->actor.world.pos)
+                                         : Math_Atan2S(sz, sx);
+    std::sort(who.begin(), who.end(), [mid](const std::pair<s16, int>& a, const std::pair<s16, int>& b) {
+        return (s16)(a.first - mid) < (s16)(b.first - mid);
+    });
+    int n = (int)who.size(), k = 0;
+    for (int j = 0; j < n; j++) {
+        if (who[j].second == c->who) {
+            k = j;
+        }
+    }
+    f32 step = Tune("fan_degrees", 40.0f) * (65536.0f / 360.0f);
+    return (s16)(mid + (s16)(((f32)k - (f32)(n - 1) * 0.5f) * step));
+}
+
+// Keeping apart: a push away from the others close by (her frame doesn't matter: a world direction)
+static void Separation(Comp* c, f32* px, f32* pz) {
+    f32 r = Tune("separation_radius", 50.0f);
+    *px = *pz = 0.0f;
+    for (int i = 0; i < COMP_COUNT; i++) {
+        Comp* o = sComp[i];
+        if ((o == nullptr) || (o == c) || o->hidden) {
+            continue;
+        }
+        f32 dx = c->actor.world.pos.x - o->actor.world.pos.x;
+        f32 dz = c->actor.world.pos.z - o->actor.world.pos.z;
+        f32 d = sqrtf(dx * dx + dz * dz);
+        if ((d < r) && (d > 0.01f)) {
+            f32 w = 1.0f - d / r;
+            *px += dx / d * w;
+            *pz += dz / d * w;
+        }
+    }
+}
+
 static void Follow(PlayState* play, Comp* c, Player* player) {
     const PersonaDef& d = Def(c);
     c->holdWalk = -1.0f;
@@ -2720,7 +2770,7 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
     f32 walkSpeed = Tune("walk_speed", 2.5f);
 
     if (c->catchingUp && !waitAtShore) {
-        s16 fromLink = Math_Vec3f_Yaw(&player->actor.world.pos, &c->actor.world.pos);
+        s16 fromLink = FanYaw(c, player);
         goal = player->actor.world.pos;
         goal.x += Math_SinS(fromLink) * nearDist;
         goal.z += Math_CosS(fromLink) * nearDist;
@@ -2758,6 +2808,14 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
     Math_ApproachF(&c->actor.speedXZ, want, 0.5f, 1.2f);
     if ((c->actor.speedXZ > 0.5f) && (dist > 1.0f)) {
         s16 yaw = Math_Vec3f_Yaw(&c->actor.world.pos, &goal);
+        // (steering around the others on the way, not running up their backs)
+        f32 px, pz;
+        Separation(c, &px, &pz);
+        if ((px != 0.0f) || (pz != 0.0f)) {
+            f32 w = Tune("separation_strength", 1.4f);
+            f32 gx = Math_SinS(yaw) + px * w, gz = Math_CosS(yaw) + pz * w;
+            yaw = Math_Atan2S(gz, gx);
+        }
         Math_SmoothStepToS(&c->actor.world.rot.y, yaw, 3, 0x1800, 0x100);
         c->actor.shape.rot.y = c->actor.world.rot.y;
     } else if ((player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) && (toLink < 600.0f)) {
