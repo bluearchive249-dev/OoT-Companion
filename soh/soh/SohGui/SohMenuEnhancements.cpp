@@ -1959,6 +1959,14 @@ void SohMenu::AddMenuEnhancements() {
             info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
         })
         .Options(CheckboxOptions().DefaultValue(true).Tooltip("Speech bubbles, chats and key tips."));
+    AddWidget(path, "Companions Explore", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Companions.Explore"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "While Link lingers, the girls wander off to look at what catches their eye (chests, signs, people, "
+            "animals, Gold Skulltulas...) and point it out. They never open, break or take anything."));
     AddWidget(path, "Companions Rest Songs", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("Companions.RestSongs"))
         .PreFunc([](WidgetInfo& info) {

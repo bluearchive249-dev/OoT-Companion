@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <deque>
 #include <filesystem>
 #include <fstream>
@@ -42,6 +43,7 @@
 extern "C" {
 #include "z64.h"
 #include "macros.h"
+#include "src/overlays/actors/ovl_En_Box/z_en_box.h"
 #include "functions.h"
 #include "variables.h"
 #include "src/overlays/actors/ovl_En_Arrow/z_en_arrow.h"
@@ -471,13 +473,24 @@ enum LineKind {
     L_SONG_LISTEN, // someone listening, partway through
     L_SONG_END,    // the performer, when it's over
     L_SONG_PRAISE, // the listeners, when it's over
+    L_SEE_CHEST,   // exploring: what she found
+    L_SEE_SIGN,
+    L_SEE_POT,
+    L_SEE_NPC,
+    L_SEE_DOOR,
+    L_SEE_SKULL,
+    L_SEE_STONE,
+    L_SEE_ITEM,
+    L_SEE_ANIMAL,
     L_KIND_COUNT
 };
 static const char* sKindKey[L_KIND_COUNT] = { "enter",  "idle",     "low_health", "cheer",    "boss",     "night",
                                               "attack", "hurt",     "ko",         "revive",   "support",  "chat",
                                               "talk",   "key_here", "key_near",   "key_none", "key_held", "dungeon",
                                               "water",  "wait",     "prompt",     "hug",      "hug_seen", "hold",
-                                              "let_go", "looked_at", "song_start", "song_listen", "song_end", "song_praise" };
+                                              "let_go", "looked_at", "song_start", "song_listen", "song_end", "song_praise",
+                                              "see_chest", "see_sign", "see_pot", "see_npc", "see_door", "see_skull",
+                                              "see_stone", "see_item", "see_animal" };
 
 typedef std::vector<std::string> Lines;
 static Lines sLines[P_COUNT][L_KIND_COUNT];
@@ -854,6 +867,82 @@ static void BuildLines() {
     Add(P_MALON_A, L_SONG_PRAISE, { "That was lovely!", "You've got a gift, you know that?" });
     Add(P_ZELDA_Y, L_SONG_PRAISE, { "How wonderful!", "Bravo!" });
     Add(P_ZELDA_A, L_SONG_PRAISE, { "Beautiful... thank you.", "Wonderful." });
+    // Exploring: what she found
+    Add(P_SARIA, L_SEE_CHEST, { "Link! A treasure chest! Come look!", "Ooh, I wonder what's inside this one..." });
+    Add(P_RUTO_Y, L_SEE_CHEST, { "Treasure! Open it, Link! ...And if it's shiny, it's mine.",
+                                 "A chest! Quick, before somebody else gets it!" });
+    Add(P_RUTO_A, L_SEE_CHEST, { "There's a chest over here, Link.", "A chest! Maybe something useful for once." });
+    Add(P_MALON_Y, L_SEE_CHEST, { "Fairy boy! A box! A treasure box!", "Is it full of rupees? Open it, open it!" });
+    Add(P_MALON_A, L_SEE_CHEST, { "Hey, there's a chest over here!", "Found a chest! Want me to keep watch while you open it?" });
+    Add(P_ZELDA_Y, L_SEE_CHEST, { "Link, there's a chest here. Someone hid it on purpose...",
+                                  "A treasure chest! How exciting!" });
+    Add(P_ZELDA_A, L_SEE_CHEST, { "There's a chest here, Link.", "This chest was placed with care. It may hold something important." });
+
+    Add(P_SARIA, L_SEE_SIGN, { "There's a sign here! I'm not great at reading big-people words...",
+                               "A sign! What does it say, Link?" });
+    Add(P_RUTO_Y, L_SEE_SIGN, { "A sign. Boring! ...Read it to me.", "Hmph. Who writes on wood anyway?" });
+    Add(P_RUTO_A, L_SEE_SIGN, { "A sign. Read it, Link, it might matter.", "Someone left directions here." });
+    Add(P_MALON_Y, L_SEE_SIGN, { "There's a sign! Does it say where the cows are?", "Ooh, a sign! I can read some words!" });
+    Add(P_MALON_A, L_SEE_SIGN, { "A sign here, if you wanna read it.", "This sign's seen better days." });
+    Add(P_ZELDA_Y, L_SEE_SIGN, { "There's writing here! Let me see...", "Signs can tell you a lot, if you read them carefully." });
+    Add(P_ZELDA_A, L_SEE_SIGN, { "There's a sign here. Words can be clues, Link.", "Let me read this... interesting." });
+
+    Add(P_SARIA, L_SEE_POT, { "Pots! Mido always breaks these...", "There might be something inside this." });
+    Add(P_RUTO_Y, L_SEE_POT, { "Smash it, Link! Smash it! It's fun!", "There's probably rupees in this pot." });
+    Add(P_RUTO_A, L_SEE_POT, { "Go on, break it. You always do.", "Pots and crates... Hylians keep everything in pots." });
+    Add(P_MALON_Y, L_SEE_POT, { "Dad keeps stuff in crates like these!", "Ooh, what's in here?" });
+    Add(P_MALON_A, L_SEE_POT, { "Might be something in this one.", "Somebody's storage. Don't make too big a mess, okay?" });
+    Add(P_ZELDA_Y, L_SEE_POT, { "Do you really break everyone's pots, Link?", "Something might be hidden in here." });
+    Add(P_ZELDA_A, L_SEE_POT, { "There may be supplies in these.", "Go ahead. I won't tell anyone." });
+
+    Add(P_SARIA, L_SEE_NPC, { "Hi there! I'm Saria!", "Ooh, someone new! Hello!" });
+    Add(P_RUTO_Y, L_SEE_NPC, { "Hello, commoner. I'm a princess, you know.", "Who are YOU supposed to be?" });
+    Add(P_RUTO_A, L_SEE_NPC, { "Hello. I am Ruto, Sage of Water.", "Mm. Friendly enough." });
+    Add(P_MALON_Y, L_SEE_NPC, { "Hi! I'm Malon! Have you been to Lon Lon Ranch?", "Hello! Do you like horses?" });
+    Add(P_MALON_A, L_SEE_NPC, { "Howdy! Come by the ranch sometime!", "Hello there!" });
+    Add(P_ZELDA_Y, L_SEE_NPC, { "Good day to you.", "Hello! Please don't tell anyone you saw me here..." });
+    Add(P_ZELDA_A, L_SEE_NPC, { "Hello. Stay safe.", "Good day." });
+
+    Add(P_SARIA, L_SEE_DOOR, { "Where do you think this door goes?", "A door! Let's peek!" });
+    Add(P_RUTO_Y, L_SEE_DOOR, { "A door. Open it for me, Link.", "What's behind here? Go look!" });
+    Add(P_RUTO_A, L_SEE_DOOR, { "This way, maybe?", "There's a door here, Link." });
+    Add(P_MALON_Y, L_SEE_DOOR, { "Ooh, a door! Knock knock!", "What's in there?" });
+    Add(P_MALON_A, L_SEE_DOOR, { "There's a door over here.", "Wonder where this leads." });
+    Add(P_ZELDA_Y, L_SEE_DOOR, { "Another way through... let's remember it.", "I wonder what's on the other side." });
+    Add(P_ZELDA_A, L_SEE_DOOR, { "A door. Shall we see where it leads?", "There's another way through here, Link." });
+
+    Add(P_SARIA, L_SEE_SKULL, { "Link! A Gold Skulltula, up there! Hear it ticking?", "Something golden is crawling over there!" });
+    Add(P_RUTO_Y, L_SEE_SKULL, { "EW! A gold bug! Get it, Link!", "That spider's GOLD! I want it!" });
+    Add(P_RUTO_A, L_SEE_SKULL, { "A Gold Skulltula, over there.", "There's a Gold Skulltula! Don't let it get away." });
+    Add(P_MALON_Y, L_SEE_SKULL, { "A shiny spider! Ooh, look!", "Fairy boy! A gold spider, right there!" });
+    Add(P_MALON_A, L_SEE_SKULL, { "Gold Skulltula! There, Link!", "I heard ticking... there, a gold one!" });
+    Add(P_ZELDA_Y, L_SEE_SKULL, { "A Gold Skulltula! People say they were cursed...", "Link, look! A golden spider!" });
+    Add(P_ZELDA_A, L_SEE_SKULL, { "A Gold Skulltula. There's a family in Kakariko who would thank you.",
+                                  "Over there, Link. A Gold Skulltula." });
+
+    Add(P_SARIA, L_SEE_STONE, { "A Gossip Stone! They tell the best secrets.", "Hi, Gossip Stone! ...It's shy." });
+    Add(P_RUTO_Y, L_SEE_STONE, { "This rock is staring at me.", "A talking rock? Hmph, I've seen weirder." });
+    Add(P_RUTO_A, L_SEE_STONE, { "A Gossip Stone. It might know something.", "These stones hear everything, you know." });
+    Add(P_MALON_Y, L_SEE_STONE, { "Is this rock alive?!", "Hello, rock! ...It didn't say anything." });
+    Add(P_MALON_A, L_SEE_STONE, { "One of those stones that whispers.", "Maybe it knows something." });
+    Add(P_ZELDA_Y, L_SEE_STONE, { "A Gossip Stone... the Sheikah made these.", "They say these stones hold secrets." });
+    Add(P_ZELDA_A, L_SEE_STONE, { "A Gossip Stone. The Sheikah placed these long ago.", "They say the Mask of Truth lets you hear what they know." });
+
+    Add(P_SARIA, L_SEE_ITEM, { "Link, there's something on the ground here!", "Over here! Something for you!" });
+    Add(P_RUTO_Y, L_SEE_ITEM, { "Something shiny! Mine! ...Okay, yours.", "Link! Pick this up!" });
+    Add(P_RUTO_A, L_SEE_ITEM, { "Something over here, Link.", "Don't leave this lying around." });
+    Add(P_MALON_Y, L_SEE_ITEM, { "Ooh! Fairy boy, look what I found!", "Something sparkly! Over here!" });
+    Add(P_MALON_A, L_SEE_ITEM, { "Hey, something here for you.", "Don't miss this one!" });
+    Add(P_ZELDA_Y, L_SEE_ITEM, { "Link, you dropped... no, someone left this.", "There's something here!" });
+    Add(P_ZELDA_A, L_SEE_ITEM, { "Something for you here, Link.", "Take this. You'll need it." });
+
+    Add(P_SARIA, L_SEE_ANIMAL, { "Aww, hello there little one!", "Look, Link! Isn't it cute?" });
+    Add(P_RUTO_Y, L_SEE_ANIMAL, { "Keep that thing away from me!", "What IS that? It's got feathers!" });
+    Add(P_RUTO_A, L_SEE_ANIMAL, { "Land animals are so... fluffy.", "Hm. It's cute. For a land creature." });
+    Add(P_MALON_Y, L_SEE_ANIMAL, { "Hiii! Who's a good friend? You are!", "Aww! I love animals!", "Come here, little one!" });
+    Add(P_MALON_A, L_SEE_ANIMAL, { "Hey there, sweetie. Easy now.", "Aww. Looks well fed. Somebody loves you." });
+    Add(P_ZELDA_Y, L_SEE_ANIMAL, { "Oh! Hello there!", "How sweet..." });
+    Add(P_ZELDA_A, L_SEE_ANIMAL, { "Hello, little one.", "Even now, life goes on. That's something." });
 
     // Places
     AddScene(SCENE_KOKIRI_FOREST, P_SARIA, { "Home... it looks smaller now, doesn't it?" });
@@ -1000,7 +1089,7 @@ static void LoadExtraLines() {
 
 struct CompModel;
 
-enum CompState { ST_FOLLOW, ST_IDLE, ST_ATTACK, ST_SUPPORT, ST_HURT, ST_KO, ST_EMOTE, ST_TALK, ST_HUG, ST_REST };
+enum CompState { ST_FOLLOW, ST_IDLE, ST_ATTACK, ST_SUPPORT, ST_HURT, ST_KO, ST_EMOTE, ST_TALK, ST_HUG, ST_REST, ST_EXPLORE };
 
 typedef struct {
     Actor actor;
@@ -1072,6 +1161,12 @@ typedef struct {
     u8 seated;
     s16 seatTimer;
     f32 sitAmount;
+    // Exploring: what she's gone to look at
+    Actor* poi;
+    s8 poiKind;
+    u8 explorePhase; // 0 going there, 1 looking
+    s16 exploreTimer, exploreStall, exploreCd;
+    f32 exploreBest;
 } Comp;
 
 static s16 sHugWho = -1;
@@ -1861,6 +1956,274 @@ static f32 Leash(Comp* c) {
 }
 
 // A spot near her to stroll to: on solid ground, near her own height, not too far from Link, and dry unless she swims
+// ---- Exploring ----
+// While Link lingers, a girl now and then goes to look at something in the room that catches her eye (each has her
+// own tastes) and says something about it: a chest, a sign, pots and crates, a person, a door, a Gold Skulltula, a
+// Gossip Stone, a heart or rupee on the ground, an animal. Out of reach (up a wall, over a gap) she points from where
+// she is. She doesn't open, break or take anything: it's Link's adventure. Anything that needs Link's lens, or a chest
+// that hasn't appeared yet, she can't see either.
+
+enum PoiKind { POI_CHEST, POI_SIGN, POI_POT, POI_NPC, POI_DOOR, POI_SKULL, POI_STONE, POI_ITEM, POI_ANIMAL, POI_COUNT };
+static const int sPoiLine[POI_COUNT] = { L_SEE_CHEST, L_SEE_SIGN, L_SEE_POT,  L_SEE_NPC,   L_SEE_DOOR,
+                                         L_SEE_SKULL, L_SEE_STONE, L_SEE_ITEM, L_SEE_ANIMAL };
+// How close she goes, and how sure she is to say something
+static const f32 sPoiStop[POI_COUNT] = { 50.0f, 45.0f, 38.0f, 65.0f, 60.0f, 80.0f, 50.0f, 28.0f, 55.0f };
+static const f32 sPoiSay[POI_COUNT] = { 0.9f, 0.6f, 0.4f, 0.6f, 0.5f, 1.0f, 0.8f, 0.9f, 0.7f };
+// What catches whose eye (chest, sign, pot, person, door, skulltula, stone, item, animal)
+static const f32 sPoiInterest[P_COUNT][POI_COUNT] = {
+    { 0.6f, 0.4f, 0.3f, 0.7f, 0.4f, 0.8f, 0.9f, 0.6f, 0.8f }, // Saria: people, nature, the Gossip Stones
+    { 1.0f, 0.3f, 0.6f, 0.4f, 0.5f, 0.6f, 0.4f, 0.9f, 0.3f }, // young Ruto: treasure and shiny things
+    { 0.9f, 0.5f, 0.3f, 0.5f, 0.6f, 0.7f, 0.5f, 0.7f, 0.3f }, // adult Ruto
+    { 0.6f, 0.4f, 0.7f, 0.6f, 0.4f, 0.6f, 0.4f, 0.7f, 1.0f }, // young Malon: animals!
+    { 0.6f, 0.4f, 0.6f, 0.6f, 0.4f, 0.6f, 0.4f, 0.8f, 1.0f }, // adult Malon
+    { 0.5f, 1.0f, 0.3f, 0.6f, 0.7f, 0.6f, 1.0f, 0.5f, 0.5f }, // young Zelda: writing, history, secrets
+    { 0.6f, 1.0f, 0.3f, 0.6f, 0.8f, 0.7f, 1.0f, 0.6f, 0.4f }, // adult Zelda
+};
+
+static Actor* sPoiSeen[40];
+static int sPoiSeenCount = 0;
+
+static bool PoiSeen(Actor* a) {
+    for (int i = 0; i < sPoiSeenCount; i++) {
+        if (sPoiSeen[i] == a) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void MarkPoiSeen(Actor* a) {
+    if ((a == nullptr) || PoiSeen(a)) {
+        return;
+    }
+    if (sPoiSeenCount < (int)ARRAY_COUNT(sPoiSeen)) {
+        sPoiSeen[sPoiSeenCount++] = a;
+    } else {
+        memmove(&sPoiSeen[0], &sPoiSeen[1], sizeof(sPoiSeen) - sizeof(sPoiSeen[0]));
+        sPoiSeen[ARRAY_COUNT(sPoiSeen) - 1] = a;
+    }
+}
+
+static int PoiKindOf(PlayState* play, Actor* a) {
+    if ((a->update == nullptr) || (a->draw == nullptr) || (a->flags & ACTOR_FLAG_REACT_TO_LENS)) {
+        return -1;
+    }
+    if ((a->id == sCompActorId) || (a->id == sCuccoActorId)) {
+        return -1;
+    }
+    switch (a->id) {
+        case ACTOR_EN_BOX: {
+            EnBox* box = (EnBox*)a;
+            if (Flags_GetTreasure(play, a->params & 0x1F) || (box->alpha == 0)) {
+                return -1; // (opened, or not there yet)
+            }
+            return POI_CHEST;
+        }
+        case ACTOR_EN_KANBAN:
+            return POI_SIGN;
+        case ACTOR_OBJ_TSUBO:
+        case ACTOR_OBJ_KIBAKO:
+        case ACTOR_OBJ_KIBAKO2:
+            return POI_POT;
+        case ACTOR_EN_SW:
+            return (((a->params & 0xE000) >> 0xD) > 0) ? POI_SKULL : -1;
+        case ACTOR_EN_GS:
+            return POI_STONE;
+        case ACTOR_EN_ITEM00:
+            return POI_ITEM;
+        case ACTOR_EN_NIW:
+        case ACTOR_EN_COW:
+        case ACTOR_EN_DOG:
+            return POI_ANIMAL;
+        default:
+            break;
+    }
+    if (a->category == ACTORCAT_NPC) {
+        return POI_NPC;
+    }
+    if (a->category == ACTORCAT_DOOR) {
+        return POI_DOOR;
+    }
+    return -1;
+}
+
+static bool PoiExists(PlayState* play, Actor* a) {
+    if (a == nullptr) {
+        return false;
+    }
+    for (int cat = 0; cat < ACTORCAT_MAX; cat++) {
+        for (Actor* e = play->actorCtx.actorLists[cat].head; e != nullptr; e = e->next) {
+            if (e == a) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Something she can see from here (no wall between her eyes and it)
+static bool CanSee(PlayState* play, Comp* c, Actor* a) {
+    Vec3f from = c->actor.world.pos;
+    from.y += Def(c).height * c->actor.scale.y * 0.8f;
+    Vec3f to = a->world.pos;
+    to.y += 15.0f;
+    Vec3f hit;
+    CollisionPoly* poly;
+    s32 bgId;
+    return !BgCheck_EntityLineTest1(&play->colCtx, &from, &to, &hit, &poly, true, true, true, true, &bgId);
+}
+
+static int ExploringCount() {
+    int n = 0;
+    for (int i = 0; i < COMP_COUNT; i++) {
+        n += ((sComp[i] != nullptr) && (sComp[i]->state == ST_EXPLORE)) ? 1 : 0;
+    }
+    return n;
+}
+
+static bool StartExplore(PlayState* play, Comp* c, Player* player) {
+    if ((CVarGetInteger(COMP_CVAR("Explore"), 1) == 0) || (c->exploreCd > 0) || c->swimming ||
+        (ExploringCount() >= (int)Tune("explore_max", 2.0f)) || (player->actor.speedXZ > Tune("explore_link_speed", 3.0f))) {
+        return false;
+    }
+    f32 radius = Tune("explore_radius", 380.0f);
+    Actor* best = nullptr;
+    int bestKind = -1;
+    f32 bestScore = Tune("explore_min_interest", 0.12f);
+    for (int cat = 0; cat < ACTORCAT_MAX; cat++) {
+        if ((cat == ACTORCAT_PLAYER) || (cat == ACTORCAT_EXPLOSIVE) || (cat == ACTORCAT_ITEMACTION)) {
+            continue;
+        }
+        for (Actor* a = play->actorCtx.actorLists[cat].head; a != nullptr; a = a->next) {
+            int kind = PoiKindOf(play, a);
+            if ((kind < 0) || PoiSeen(a)) {
+                continue;
+            }
+            f32 fromLink = Actor_WorldDistXZToActor(&player->actor, a);
+            f32 fromHer = Actor_WorldDistXZToActor(&c->actor, a);
+            if ((fromLink > radius) || (fromHer > radius * 1.3f) || (fabsf(a->world.pos.y - c->actor.world.pos.y) > 300.0f)) {
+                continue;
+            }
+            f32 score = sPoiInterest[c->persona][kind] * (0.6f + 0.4f * Rand_ZeroOne()) / (1.0f + fromHer / 250.0f);
+            // (a heart when he's hurt: worth pointing out)
+            if ((kind == POI_ITEM) && (gSaveContext.health <= gSaveContext.healthCapacity / 2)) {
+                score *= 2.0f;
+            }
+            if ((score > bestScore) && CanSee(play, c, a)) {
+                bestScore = score;
+                best = a;
+                bestKind = kind;
+            }
+        }
+    }
+    if (best == nullptr) {
+        c->exploreCd = (s16)(Tune("explore_retry_seconds", 4.0f) * COMP_FPS);
+        return false;
+    }
+    MarkPoiSeen(best); // (no one else goes to the same thing)
+    c->state = ST_EXPLORE;
+    c->poi = best;
+    c->poiKind = (s8)bestKind;
+    c->explorePhase = 0;
+    c->exploreTimer = 0;
+    c->exploreStall = 0;
+    c->exploreBest = 1e9f;
+    c->wandering = 0;
+    // (high up or far down: she points from here)
+    if (fabsf(best->world.pos.y - c->actor.world.pos.y) > 50.0f) {
+        c->explorePhase = 1;
+    }
+    return true;
+}
+
+static void EndExplore(Comp* c) {
+    c->state = ST_FOLLOW;
+    c->poi = nullptr;
+    c->eyeOverride = -1;
+    c->actor.speedXZ = 0.0f;
+    c->wanderTimer = Rand_S16Offset(40, 80);
+    c->exploreCd = (s16)((Tune("explore_min_seconds", 7.0f) + Rand_ZeroOne() * Tune("explore_extra_seconds", 10.0f)) *
+                         COMP_FPS);
+}
+
+static void UpdateExplore(PlayState* play, Comp* c, Player* player) {
+    const PersonaDef& d = Def(c);
+    c->exploreTimer++;
+    // Link heading off, an enemy, the thing gone, or taking too long: back to him
+    if (!PoiExists(play, c->poi) || (Actor_WorldDistXZToActor(&c->actor, &player->actor) > Leash(c) * 1.4f) ||
+        (c->exploreTimer > (s16)(Tune("explore_max_seconds", 9.0f) * COMP_FPS))) {
+        EndExplore(c);
+        return;
+    }
+    if (((c->exploreTimer % 10) == 0) && (FindTarget(play, c) != nullptr)) {
+        EndExplore(c);
+        return;
+    }
+    Actor* a = c->poi;
+    f32 dist = Actor_WorldDistXZToActor(&c->actor, a);
+    if (c->explorePhase == 0) {
+        // Over to it
+        bool arrived = dist < sPoiStop[c->poiKind];
+        // (not getting any closer: a wall, something in the way)
+        if (dist < c->exploreBest - 2.0f) {
+            c->exploreBest = dist;
+            c->exploreStall = 0;
+        } else if (++c->exploreStall > 25) {
+            arrived = true;
+        }
+        // (the ground falls away ahead, or deep water: she stops at the edge)
+        s16 yaw = Math_Vec3f_Yaw(&c->actor.world.pos, &a->world.pos);
+        Vec3f ahead = c->actor.world.pos;
+        ahead.x += Math_SinS(yaw) * 25.0f;
+        ahead.z += Math_CosS(yaw) * 25.0f;
+        ahead.y += 40.0f;
+        CollisionPoly* poly;
+        s32 bgId;
+        f32 floorY = BgCheck_EntityRaycastFloor3(&play->colCtx, &poly, &bgId, &ahead);
+        f32 waterY;
+        WaterBox* wb;
+        if ((floorY <= BGCHECK_Y_MIN) || (floorY < c->actor.world.pos.y - 40.0f) ||
+            ((d.swim == nullptr) && WaterBox_GetSurface1(play, &play->colCtx, ahead.x, ahead.z, &waterY, &wb) &&
+             (waterY > floorY + 15.0f))) {
+            arrived = true;
+        }
+        if (arrived) {
+            c->explorePhase = 1;
+            c->exploreTimer = 0;
+            c->actor.speedXZ = 0.0f;
+        } else {
+            c->actor.world.rot.y = yaw;
+            Math_SmoothStepToS(&c->actor.shape.rot.y, yaw, 3, 0x1000, 0x100);
+            Math_ApproachF(&c->actor.speedXZ, Tune("walk_speed", 2.5f) * Tune("explore_speed", 1.0f), 0.5f, 0.6f);
+            bool mixWalk = MixamoOn() && (c->rigState == 1) && (c->rig.lThigh != 0);
+            if ((d.move != nullptr) && !mixWalk && !(c->linkWalk && CVarGetInteger(COMP_CVAR("LinkWalk"), 1))) {
+                SetAnim(c, d.move, std::max(0.6f, c->actor.speedXZ * d.moveAnimSpeed), ANIMMODE_LOOP, -5.0f);
+            } else {
+                SetAnim(c, d.idle, 1.0f, ANIMMODE_LOOP, -6.0f);
+            }
+            return;
+        }
+    }
+    // Looking at it, and saying something
+    c->actor.speedXZ = 0.0f;
+    s16 yaw = Math_Vec3f_Yaw(&c->actor.world.pos, &a->world.pos);
+    Math_SmoothStepToS(&c->actor.shape.rot.y, yaw, 3, 0x1000, 0x100);
+    c->actor.world.rot.y = c->actor.shape.rot.y;
+    if (c->exploreTimer == 6) {
+        if (Rand_ZeroOne() < sPoiSay[c->poiKind] * Tune("explore_talk", 1.0f)) {
+            SayKind(c->who, sPoiLine[c->poiKind]);
+        }
+        const char* anim = (c->poiKind == POI_ANIMAL || c->poiKind == POI_ITEM) ? d.happy
+                           : (c->poiKind == POI_NPC)                            ? d.wave
+                           : (d.worried != nullptr)                             ? d.worried
+                                                                                : d.idle;
+        SetAnim(c, (anim != nullptr) ? anim : d.idle, 1.0f, ANIMMODE_LOOP, -6.0f);
+    }
+    if (c->exploreTimer > (s16)(Tune("explore_look_seconds", 3.0f) * COMP_FPS)) {
+        EndExplore(c);
+    }
+}
+
 static bool PickWanderSpot(PlayState* play, Comp* c, Player* player) {
     for (int tries = 0; tries < 4; tries++) {
         s16 yaw = (s16)(Rand_ZeroOne() * 65535.0f);
@@ -1960,7 +2323,10 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
                 want = walkSpeed * Tune("wander_speed", 0.7f);
             }
         } else if (--c->wanderTimer <= 0) {
-            // Now and then a little walk
+            // Now and then something catches her eye, or a little walk
+            if ((Rand_ZeroOne() < Tune("explore_chance", 0.6f)) && StartExplore(play, c, player)) {
+                return;
+            }
             if ((Rand_ZeroOne() < Tune("wander_chance", 0.6f)) && PickWanderSpot(play, c, player)) {
                 c->wandering = 1;
             }
@@ -2207,7 +2573,7 @@ static bool SitsNow(Comp* c) {
 
 static bool CanRest(Comp* c) {
     return (c != nullptr) && !c->hidden && !c->swimming &&
-           ((c->state == ST_FOLLOW) || (c->state == ST_IDLE) || (c->state == ST_EMOTE));
+           ((c->state == ST_FOLLOW) || (c->state == ST_IDLE) || (c->state == ST_EMOTE) || (c->state == ST_EXPLORE));
 }
 
 static void EndSong(PlayState* play, bool finished) {
@@ -2907,6 +3273,9 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
     if (c->cdSupport > 0) {
         c->cdSupport--;
     }
+    if (c->exploreCd > 0) {
+        c->exploreCd--;
+    }
     SkelAnime_Update(&c->skel);
     if (c->model != nullptr) {
         // Her model moves with Link's own animations: standing, walking, running
@@ -3019,6 +3388,9 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
             break;
         case ST_REST:
             UpdateRest(play, c, player);
+            break;
+        case ST_EXPLORE:
+            UpdateExplore(play, c, player);
             break;
         default:
             if (!ThinkFight(play, c, player)) {
@@ -3705,6 +4077,7 @@ static void OnSceneInit(int16_t sceneNum) {
     // (a new place has its own music: nothing to give back)
     sSong.performer = -1;
     sSong.music = false;
+    sPoiSeenCount = 0;
     if (sLinkSits) {
         sLinkSits = false;
         if (sHugWho < 0) {
