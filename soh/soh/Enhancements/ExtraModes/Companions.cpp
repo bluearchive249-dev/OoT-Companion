@@ -379,6 +379,44 @@ static CompPersona PersonaFor(int who, bool adult) {
     }
 }
 
+// ---- Link's walk on them ----
+// Their own skeletons take Link's walk and run: each frame a hidden copy of Link's skeleton plays his walk, and how
+// far each of his leg and arm joints has turned from his standing pose is added to the same joint of hers (limbs
+// from the game's asset lists, object_*.yml). Order: left thigh, shin, foot; right thigh, shin, foot; left shoulder,
+// arm; right shoulder, arm (0: none). Live in ganondorf_tuning.json: "companion.<persona>.walk_map" (10 numbers),
+// "companion.<persona>.walk_sign" [legs, arms] (1 or -1), "companion.walk_mix".
+static const u8 sLinkLimbs[10] = { 7, 8, 9, 4, 5, 6, 14, 15, 17, 18 };
+static const u8 sWalkMap[P_COUNT][10] = {
+    { 3, 4, 5, 6, 7, 8, 10, 11, 13, 14 }, // Saria
+    { 2, 3, 4, 5, 6, 7, 9, 10, 12, 13 },  // young Ruto
+    { 2, 3, 4, 6, 7, 8, 11, 14, 16, 19 }, // adult Ruto
+    { 2, 3, 4, 5, 6, 7, 9, 10, 12, 13 },  // young Malon
+    { 3, 4, 5, 6, 7, 8, 12, 13, 15, 16 }, // adult Malon
+    { 0, 0, 0, 0, 0, 0, 11, 12, 14, 15 }, // young Zelda (unnamed limbs: arms guessed, the dress hides her legs)
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },     // adult Zelda (she has her own run)
+};
+
+// Her side of a hug: arms out, or the closest the game has
+static const char* sHugAnim[P_COUNT] = {
+    OTR("object_sa", "gSariaHandsOutAnim"),
+    OTR("object_ru1", "gRutoChildHoldArmsUpAnim"),
+    OTR("object_ru2", "gAdultRutoRaisingArmsUpAnim"),
+    OTR("object_ma1", "gMalonChildRaiseHandsAnim"),
+    OTR("object_ma2", "gMalonAdultStandStillAnim"),
+    OTR("object_zl4", "gChildZeldaAnim_01910C"),
+    OTR("object_zl2_anime2", "gZelda2Anime2Anim_008050"),
+};
+// Link's side: arms forward (ganondorf_tuning.json "companion.hug_link_anim": 0-3)
+static const char* sLinkHugAnims[] = {
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_push_wait",
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_kakeyori_wait",
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_carry",
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_look_hand_wait",
+};
+static const char* const LINK_WALK = "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_walk";
+static const char* const LINK_RUN = "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_run";
+static const char* const LINK_WAIT = "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_wait";
+
 // ---- What they say ----
 // Built in, and anything in companion_lines.json added on top: { "saria": { "idle": ["...", ...] }, ... ,
 // "banter": [ { "a": "saria", "b": "ruto_young", "lines": ["...", "...", ...] } ] } (lines alternate a, b, a...)
@@ -404,12 +442,15 @@ enum LineKind {
     L_DUNGEON,
     L_WATER,
     L_WAIT,
+    L_PROMPT,
+    L_HUG,
+    L_HUG_SEEN,
     L_KIND_COUNT
 };
-static const char* sKindKey[L_KIND_COUNT] = { "enter",    "idle",     "low_health", "cheer",    "boss",
-                                              "night",    "attack",   "hurt",       "ko",       "revive",
-                                              "support",  "chat",     "talk",       "key_here", "key_near",
-                                              "key_none", "key_held", "dungeon",    "water",    "wait" };
+static const char* sKindKey[L_KIND_COUNT] = { "enter",  "idle",     "low_health", "cheer",    "boss",     "night",
+                                              "attack", "hurt",     "ko",         "revive",   "support",  "chat",
+                                              "talk",   "key_here", "key_near",   "key_none", "key_held", "dungeon",
+                                              "water",  "wait",     "prompt",     "hug",      "hug_seen" };
 
 typedef std::vector<std::string> Lines;
 static Lines sLines[P_COUNT][L_KIND_COUNT];
@@ -689,6 +730,42 @@ static void BuildLines() {
     Add(P_ZELDA_A, L_WATER, { "Go on, Link. I'll meet you on the other side." });
     Add(P_ZELDA_A, L_WAIT, { "Link, wait for me." });
 
+    // Talking to her (the question before Talk / Hug), hugs, and seeing someone else get one
+    Add(P_SARIA, L_PROMPT, { "Hee hee, what is it, Link?", "Hm? Do you need something?" });
+    Add(P_SARIA, L_HUG,
+        { "Hee hee! You give the best hugs, Link.", "Aww... I missed this.", "Just like when we were little!" });
+    Add(P_SARIA, L_HUG_SEEN, { "Hee hee, that's sweet!", "Don't forget about me, Link!" });
+    Add(P_RUTO_Y, L_PROMPT, { "What is it? Speak, my fiancé.", "Yes? A princess is listening." });
+    Add(P_RUTO_Y, L_HUG,
+        { "W-what are you doing?! ...Okay. You can hold on a little longer.", "Finally, some proper affection!",
+          "Hmph. I suppose I deserve this." });
+    Add(P_RUTO_Y, L_HUG_SEEN, { "HEY! He's MY fiancé!", "Excuse me?! Unhand him!", "...Me next. That's an order." });
+    Add(P_RUTO_A, L_PROMPT, { "Yes, Link?", "Something on your mind?" });
+    Add(P_RUTO_A, L_HUG,
+        { "Oh! ...You've gotten taller, haven't you.", "I'll take that as a yes to the engagement.",
+          "Mm. Warm, for a Hylian." });
+    Add(P_RUTO_A, L_HUG_SEEN, { "Ahem. I'm standing right here.", "Some of us are engaged to him, you know." });
+    Add(P_MALON_Y, L_PROMPT, { "Fairy boy? What's up?", "Hi! Wanna talk?" });
+    Add(P_MALON_Y, L_HUG,
+        { "Yay! Hugs! Epona likes hugs too!", "Hee hee, you're squishy!",
+          "Dad says hugs make the cows happy. I think it works on people too!" });
+    Add(P_MALON_Y, L_HUG_SEEN, { "Aww! Can I have one too?", "Hee hee! Group hug next!" });
+    Add(P_MALON_A, L_PROMPT, { "Yes, Link?", "What is it?" });
+    Add(P_MALON_A, L_HUG,
+        { "Oh... Link. Thank you. I needed that.", "You smell like hay and adventure.",
+          "Seven years I waited for this, you know." });
+    Add(P_MALON_A, L_HUG_SEEN, { "Aww, that's sweet.", "Save one for me, Link!" });
+    Add(P_ZELDA_Y, L_PROMPT, { "Yes, Link? What is it?", "Did you wish to speak with me?" });
+    Add(P_ZELDA_Y, L_HUG,
+        { "Oh! Link... Impa would faint. Let's not tell her.", "...Thank you. I feel braver now.",
+          "A princess shouldn't... oh, never mind. Just a little longer." });
+    Add(P_ZELDA_Y, L_HUG_SEEN, { "How sweet...", "Link is very kind to everyone, isn't he?" });
+    Add(P_ZELDA_A, L_PROMPT, { "Yes, Link?", "What is it?" });
+    Add(P_ZELDA_A, L_HUG,
+        { "Link... thank you. For everything.", "Seven years... and you're finally here.",
+          "I'll remember this, whatever comes next." });
+    Add(P_ZELDA_A, L_HUG_SEEN, { "They both deserve that.", "How lovely." });
+
     // Places
     AddScene(SCENE_KOKIRI_FOREST, P_SARIA, { "Home... it looks smaller now, doesn't it?" });
     AddScene(SCENE_KOKIRI_FOREST, P_RUTO_Y, { "So THIS is where you grew up? Everything's so tiny!" });
@@ -832,7 +909,7 @@ static void LoadExtraLines() {
 
 // ---- The actor ----
 
-enum CompState { ST_FOLLOW, ST_IDLE, ST_ATTACK, ST_SUPPORT, ST_HURT, ST_KO, ST_EMOTE, ST_TALK };
+enum CompState { ST_FOLLOW, ST_IDLE, ST_ATTACK, ST_SUPPORT, ST_HURT, ST_KO, ST_EMOTE, ST_TALK, ST_HUG };
 
 typedef struct {
     Actor actor;
@@ -859,7 +936,21 @@ typedef struct {
     Actor* target;
     const char* anim;
     s16 formation;
+    // Link's walk (a hidden copy of his skeleton walking, and one standing)
+    SkelAnime puppet;
+    SkelAnime rest;
+    Vec3s puppetJoints[PLAYER_LIMB_BUF_COUNT];
+    Vec3s puppetMorph[PLAYER_LIMB_BUF_COUNT];
+    Vec3s restJoints[PLAYER_LIMB_BUF_COUNT];
+    Vec3s restMorph[PLAYER_LIMB_BUF_COUNT];
+    const char* puppetAnim;
+    u8 linkWalk;
+    f32 walkAmount;
+    u8 talkStage;
+    u8 restFrames;
 } Comp;
+
+static s16 sHugWho = -1;
 
 static s16 sCompActorId = -1;
 static s16 sCuccoActorId = -1;
@@ -1272,6 +1363,21 @@ static void Comp_Init(Actor* thisx, PlayState* play) {
     c->eyeOverride = -1;
     c->cdRanged = c->cdClose = c->cdMelee = 40;
     c->cdSupport = 200;
+    for (int i = 0; i < 10; i++) {
+        c->linkWalk |= (sWalkMap[c->persona][i] != 0) ? 1 : 0;
+    }
+    if (c->linkWalk) {
+        FlexSkeletonHeader* link = (FlexSkeletonHeader*)(c->adult ? "__OTR__objects/object_link_boy/gLinkAdultSkel"
+                                                                  : "__OTR__objects/object_link_child/gLinkChildSkel");
+        SkelAnime_InitLink(play, &c->puppet, link, (LinkAnimationHeader*)LINK_WALK, 9, c->puppetJoints, c->puppetMorph,
+                           PLAYER_LIMB_MAX);
+        SkelAnime_InitLink(play, &c->rest, link, (LinkAnimationHeader*)LINK_WAIT, 9, c->restJoints, c->restMorph,
+                           PLAYER_LIMB_MAX);
+        LinkAnimation_PlayLoop(play, &c->puppet, (LinkAnimationHeader*)LINK_WALK);
+        LinkAnimation_PlayLoop(play, &c->rest, (LinkAnimationHeader*)LINK_WAIT);
+        c->rest.playSpeed = 0.0f;
+        c->puppetAnim = LINK_WALK;
+    }
     sComp[c->who] = c;
 }
 
@@ -1282,6 +1388,9 @@ static void Comp_Destroy(Actor* thisx, PlayState* play) {
     SkelAnime_Free(&c->skel, play);
     if ((c->who >= 0) && (c->who < COMP_COUNT) && (sComp[c->who] == c)) {
         sComp[c->who] = nullptr;
+    }
+    if (sHugWho == c->who) {
+        sHugWho = -1;
     }
 }
 
@@ -1326,6 +1435,9 @@ static bool LinkSwimming(Player* player) {
 }
 
 static bool LinkBusy(PlayState* play, Player* player) {
+    if (sHugWho >= 0) {
+        return false; // (a hug holds him still; that's not a cutscene)
+    }
     return (play->csCtx.state != CS_STATE_IDLE) || Player_InCsMode(play) ||
            (player->stateFlags1 & (PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING | PLAYER_STATE1_DEAD)) ||
            (play->transitionTrigger != TRANS_TRIGGER_OFF);
@@ -1557,7 +1669,7 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
     if (c->swimming) {
         SetAnim(c, d.swim, 1.0f, ANIMMODE_LOOP, -6.0f);
     } else if (c->actor.speedXZ > 0.8f) {
-        if (d.move != nullptr) {
+        if ((d.move != nullptr) && !(c->linkWalk && CVarGetInteger(COMP_CVAR("LinkWalk"), 1))) {
             SetAnim(c, d.move, std::max(0.6f, c->actor.speedXZ * d.moveAnimSpeed), ANIMMODE_LOOP, -5.0f);
         } else {
             SetAnim(c, d.idle, 1.0f, ANIMMODE_LOOP, -6.0f);
@@ -1581,6 +1693,81 @@ static void Emote(Comp* c, const char* anim, s16 frames, s16 eye) {
     }
 }
 
+// ---- Hugs ----
+
+static void EndHug(PlayState* play, Comp* c) {
+    if (sHugWho == c->who) {
+        sHugWho = -1;
+        Player_SetCsAction(play, nullptr, PLAYER_CSACTION_7); // (he's free again)
+    }
+    c->state = ST_FOLLOW;
+    c->eyeOverride = -1;
+    Emote(c, Def(c).happy, 30, -1);
+}
+
+static void StartHug(PlayState* play, Comp* c, Player* player) {
+    c->state = ST_HUG;
+    c->timer = (s16)(Tune("hug_seconds", 3.5f) * COMP_FPS);
+    c->actor.speedXZ = 0.0f;
+    c->mouthTimer = 0;
+    sHugWho = c->who;
+
+    // Face to face, close
+    s16 yaw = Math_Vec3f_Yaw(&player->actor.world.pos, &c->actor.world.pos);
+    f32 dist = c->adult ? Tune("hug_distance_adult", 24.0f) : Tune("hug_distance_child", 20.0f);
+    c->actor.world.pos.x = player->actor.world.pos.x + Math_SinS(yaw) * dist;
+    c->actor.world.pos.z = player->actor.world.pos.z + Math_CosS(yaw) * dist;
+    c->actor.world.pos.y = player->actor.world.pos.y;
+    c->actor.shape.rot.y = c->actor.world.rot.y = (s16)(yaw + 0x8000);
+    player->actor.shape.rot.y = player->actor.world.rot.y = player->yaw = yaw;
+    Player_SetCsAction(play, nullptr, PLAYER_CSACTION_93);
+
+    SetAnim(c, sHugAnim[c->persona], 1.0f, ANIMMODE_ONCE, -6.0f);
+    c->eyeOverride = 2;
+    Voice(&c->actor, Def(c).voiceHappy);
+    Sfx_PlaySfxCentered(NA_SE_EV_FAIRY_DASH);
+    gSaveContext.healthAccumulator = (s16)(gSaveContext.healthAccumulator + (s16)Tune("hug_heal_quarters", 4.0f) * 4);
+    SayKind(c->who, L_HUG);
+
+    // Someone else sees it
+    for (int i = 0; i < COMP_COUNT; i++) {
+        if ((i != c->who) && (sComp[i] != nullptr) && !sComp[i]->hidden && (sComp[i]->state != ST_KO) &&
+            (Rand_ZeroOne() < Tune("hug_seen_chance", 0.5f))) {
+            std::string line = Pick(sLines[sComp[i]->persona][L_HUG_SEEN]);
+            if (!line.empty()) {
+                sPending.push_back({ i, line, (s32)(Tune("bubble_seconds", 2.5f) * COMP_FPS) });
+            }
+            break;
+        }
+    }
+}
+
+static void UpdateHug(PlayState* play, Comp* c, Player* player) {
+    c->actor.speedXZ = 0.0f;
+    // Link holds her (his arms forward, kept while the hug lasts)
+    if (player->csAction == PLAYER_CSACTION_93) {
+        const char* a = sLinkHugAnims[CLAMP((int)Tune("hug_link_anim", 0.0f), 0, 3)];
+        if (player->skelAnime.animation != (LinkAnimationHeader*)a) {
+            LinkAnimation_PlayLoop(play, &player->skelAnime, (LinkAnimationHeader*)a);
+        }
+    } else if (c->timer < (s16)(Tune("hug_seconds", 3.5f) * COMP_FPS) - 3) {
+        Player_SetCsAction(play, nullptr, PLAYER_CSACTION_93);
+    }
+    // Sparkles over them
+    if ((c->timer % 5) == 0) {
+        Vec3f p = c->actor.world.pos;
+        p.x = (p.x + player->actor.world.pos.x) * 0.5f + Rand_CenteredFloat(20.0f);
+        p.z = (p.z + player->actor.world.pos.z) * 0.5f + Rand_CenteredFloat(20.0f);
+        p.y += Def(c).height * c->actor.scale.y + Rand_ZeroFloat(10.0f);
+        Vec3f vel = { 0.0f, 0.6f, 0.0f };
+        Vec3f accel = { 0.0f, 0.05f, 0.0f };
+        EffectSsKiraKira_SpawnSmallYellow(play, &p, &vel, &accel);
+    }
+    if (--c->timer <= 0) {
+        EndHug(play, c);
+    }
+}
+
 static void UpdateFace(Comp* c) {
     if (c->blinkTimer-- <= 0) {
         if (++c->eye > 2) {
@@ -1593,7 +1780,7 @@ static void UpdateFace(Comp* c) {
         c->mouth = ((c->mouthTimer / 3) % 2) ? 1 : 0;
     } else if (c->state == ST_KO || c->state == ST_HURT) {
         c->mouth = 2;
-    } else if (c->state == ST_EMOTE) {
+    } else if ((c->state == ST_EMOTE) || (c->state == ST_HUG)) {
         c->mouth = 1;
     } else {
         c->mouth = 0;
@@ -1639,6 +1826,9 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
     // Hit by an enemy
     if (c->body.base.acFlags & AC_HIT) {
         c->body.base.acFlags &= ~AC_HIT;
+        if (c->state == ST_HUG) {
+            EndHug(play, c);
+        }
         if ((c->state != ST_KO) && (c->state != ST_HURT)) {
             c->hp--;
             Voice(thisx, d.voiceHurt);
@@ -1698,10 +1888,25 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
         case ST_TALK:
             c->actor.speedXZ = 0.0f;
             Math_SmoothStepToS(&c->actor.shape.rot.y, c->actor.yawTowardsPlayer, 4, 0x800, 0x100);
+            // "Talk" or "Hug"
+            if ((c->talkStage == 0) && (Message_GetState(&play->msgCtx) == TEXT_STATE_CHOICE) &&
+                Message_ShouldAdvance(play)) {
+                if (play->msgCtx.choiceIndex == 0) {
+                    c->talkStage = 1;
+                    Message_ContinueTextbox(play, COMP_TEXT_ID);
+                } else {
+                    Message_CloseTextbox(play);
+                    StartHug(play, c, player);
+                    break;
+                }
+            }
             if ((--c->timer <= 0) && (play->msgCtx.msgMode == MSGMODE_NONE)) {
                 c->state = ST_FOLLOW;
                 Emote(c, d.happy, 30, -1);
             }
+            break;
+        case ST_HUG:
+            UpdateHug(play, c, player);
             break;
         default:
             if (!ThinkFight(play, c, player)) {
@@ -1727,9 +1932,11 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
     }
 
     // Talk: Z-target her and press A
-    if ((c->state != ST_KO) && (c->state != ST_ATTACK) && (c->state != ST_TALK)) {
+    if ((c->state != ST_KO) && (c->state != ST_ATTACK) && (c->state != ST_TALK) && (c->state != ST_HUG) &&
+        (sHugWho < 0)) {
         if (Actor_ProcessTalkRequest(thisx, play)) {
             c->state = ST_TALK;
+            c->talkStage = 0;
             c->timer = 10;
             c->actor.speedXZ = 0.0f;
         } else if (player->focusActor == thisx) {
@@ -1737,10 +1944,29 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
         }
     }
 
-    // A hand-made walk for those the game never gave one: her legs swing as she moves
-    f32 legTarget = ((d.move == nullptr) && !c->swimming && (c->actor.speedXZ > 0.8f)) ? 1.0f : 0.0f;
-    Math_ApproachF(&c->legAmount, legTarget, 0.3f, 0.1f);
-    c->legPhase += c->actor.speedXZ * Tune("leg_rate", 0.09f);
+    // Link's walk: his hidden skeleton walks or runs at her speed
+    if (c->linkWalk) {
+        bool walking = CVarGetInteger(COMP_CVAR("LinkWalk"), 1) && !c->swimming && (c->state != ST_KO) &&
+                       (c->state != ST_HUG) && (fabsf(c->actor.speedXZ) > 0.8f);
+        Math_ApproachF(&c->walkAmount, walking ? 1.0f : 0.0f, 0.35f, 0.12f);
+        if (c->walkAmount > 0.0f) {
+            const char* want = (c->actor.speedXZ > Tune("run_above", 4.2f)) ? LINK_RUN : LINK_WALK;
+            if (want != c->puppetAnim) {
+                c->puppetAnim = want;
+                LinkAnimation_Change(play, &c->puppet, (LinkAnimationHeader*)want, 1.0f, 0.0f,
+                                     (f32)Animation_GetLastFrame((void*)want), ANIMMODE_LOOP, -6.0f);
+            }
+            c->puppet.playSpeed = CLAMP(fabsf(c->actor.speedXZ) * ((want == LINK_RUN) ? Tune("run_anim_rate", 0.22f)
+                                                                                      : Tune("walk_anim_rate", 0.45f)),
+                                        0.5f, 2.0f);
+            LinkAnimation_Update(play, &c->puppet);
+        }
+        // (the standing pose, read once its frame is in)
+        if ((c->restFrames < 8) || (play->gameplayFrames % 30 == (u32)c->who)) {
+            c->restFrames++;
+            LinkAnimation_Update(play, &c->rest);
+        }
+    }
 
     if (c->swimming) {
         // Ruto floats at the surface
@@ -1782,24 +2008,25 @@ static s32 Comp_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Ve
     if ((c->persona == P_SARIA) && (limbIndex == 15) && (c->anim == d.support)) {
         *dList = (Gfx*)OTR("object_sa", "gSariaRightHandAndOcarinaDL");
     }
-    // The hand-made walk (limbs and swing in ganondorf_tuning.json: "companion.<who>.legs": [lThigh, lShin, rThigh,
-    // rShin], "companion.leg_swing")
-    if (c->legAmount > 0.01f) {
-        std::string k = std::string("companion.") + sPersonaKey[c->persona] + ".legs";
-        int lt = (int)GdfTuneAt(k.c_str(), 0, d.legs[0]);
-        int ls = (int)GdfTuneAt(k.c_str(), 1, d.legs[1]);
-        int rt = (int)GdfTuneAt(k.c_str(), 2, d.legs[2]);
-        int rs = (int)GdfTuneAt(k.c_str(), 3, d.legs[3]);
-        f32 swing = Tune("leg_swing", 5500.0f) * c->legAmount;
-        f32 s = sinf(c->legPhase);
-        if ((limbIndex == lt) && (lt != 0)) {
-            rot->z = (s16)(rot->z + (s16)(s * swing));
-        } else if ((limbIndex == rt) && (rt != 0)) {
-            rot->z = (s16)(rot->z - (s16)(s * swing));
-        } else if ((limbIndex == ls) && (ls != 0)) {
-            rot->z = (s16)(rot->z - (s16)(fmaxf(0.0f, s) * swing * 0.8f));
-        } else if ((limbIndex == rs) && (rs != 0)) {
-            rot->z = (s16)(rot->z - (s16)(fmaxf(0.0f, -s) * swing * 0.8f));
+    // Link's walk: how far his joint has turned from standing, added to hers
+    if (c->linkWalk && (c->walkAmount > 0.01f) && (c->restFrames >= 3)) {
+        std::string k = std::string("companion.") + sPersonaKey[c->persona];
+        f32 mix = Tune("walk_mix", 1.0f) * c->walkAmount;
+        if (limbIndex == 1) {
+            // (his bob up and down)
+            pos->y += (f32)(c->puppetJoints[0].y - c->restJoints[0].y) * mix * Tune("walk_bob", 0.6f);
+        }
+        for (int i = 0; i < 10; i++) {
+            int limb = (int)GdfTuneAt((k + ".walk_map").c_str(), i, sWalkMap[c->persona][i]);
+            if ((limb == 0) || (limb != limbIndex)) {
+                continue;
+            }
+            f32 sign = GdfTuneAt((k + ".walk_sign").c_str(), (i < 6) ? 0 : 1, 1.0f);
+            const Vec3s& a = c->puppetJoints[sLinkLimbs[i]];
+            const Vec3s& b = c->restJoints[sLinkLimbs[i]];
+            rot->x = (s16)(rot->x + (s16)((f32)(s16)(a.x - b.x) * mix * sign));
+            rot->y = (s16)(rot->y + (s16)((f32)(s16)(a.y - b.y) * mix * sign));
+            rot->z = (s16)(rot->z + (s16)((f32)(s16)(a.z - b.z) * mix * sign));
         }
     }
     // Adult Zelda's hair hangs from her head in seven pieces (as in the castle escape, at rest)
@@ -1878,9 +2105,18 @@ static void OnOpenText(uint16_t* textId, bool* loadFromMessageTable) {
         return;
     }
     const PersonaDef& d = Def(c);
-    std::string line = Pick(sLines[c->persona][L_TALK]);
-    if (line.empty()) {
-        line = Pick(sLines[c->persona][L_CHAT]);
+    std::string line;
+    bool prompt = (c->talkStage == 0);
+    if (prompt) {
+        line = Pick(sLines[c->persona][L_PROMPT]);
+        if (line.empty()) {
+            line = "Yes, Link?";
+        }
+    } else {
+        line = Pick(sLines[c->persona][L_TALK]);
+        if (line.empty()) {
+            line = Pick(sLines[c->persona][L_CHAT]);
+        }
     }
     char head[32];
     snprintf(head, sizeof(head), "%s:%s ", d.name, "%w");
@@ -1889,7 +2125,11 @@ static void OnOpenText(uint16_t* textId, bool* loadFromMessageTable) {
                                 : (c->who == COMP_MALON) ? "%y"
                                                          : "%g") +
                     head + line;
-    CustomMessage msg = CustomMessage(GdfFitBoxes(t.c_str()), TEXTBOX_TYPE_BLACK, TEXTBOX_POS_BOTTOM);
+    if (prompt) {
+        // (one short box, then the two choices)
+        t += "\x1B&%gTalk&Hug%w";
+    }
+    CustomMessage msg = CustomMessage(prompt ? t : GdfFitBoxes(t.c_str()), TEXTBOX_TYPE_BLACK, TEXTBOX_POS_BOTTOM);
     msg.AutoFormat();
     msg.LoadIntoFont();
     *loadFromMessageTable = false;

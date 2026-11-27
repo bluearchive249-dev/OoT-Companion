@@ -2117,7 +2117,7 @@ void SohMenu::AddMenuEnhancements() {
             " - Ruto: a running water splash (adult: ice arrows too). She swims; the others wait on the shore.\n"
             " - Malon: sends angry cuccos at enemies, Lon Lon Milk heals Link.\n"
             " - Zelda: a Sheikah nut flash (adult: Light Arrows), her lullaby / Nayru's Love keeps Link from harm.\n\n"
-            "Z-target one of them and press A to talk. Lines can be added in companion_lines.json in the game's "
+            "Z-target one of them and press A, then choose Talk or Hug. Lines can be added in companion_lines.json in the game's "
             "folder."));
     AddWidget(path, "Saria", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("Companions.Saria"))
@@ -2143,6 +2143,14 @@ void SohMenu::AddMenuEnhancements() {
             info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
         })
         .Options(CheckboxOptions().DefaultValue(true).Tooltip("Whether Zelda comes along."));
+    AddWidget(path, "Link's Walk", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Companions.LinkWalk"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "They walk and run with Link's own walk and run, put on their skeletons (adult Zelda keeps her own "
+            "run). Off: their own animations, and a glide for those the game never gave a walk."));
     AddWidget(path, "Companions Fight", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("Companions.Fight"))
         .PreFunc([](WidgetInfo& info) {
