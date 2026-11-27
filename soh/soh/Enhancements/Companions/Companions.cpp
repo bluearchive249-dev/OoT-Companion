@@ -2211,7 +2211,7 @@ static void EndSong(PlayState* play, bool finished) {
         if (sSong.prevSeq == NA_BGM_NATURE_AMBIENCE) {
             Audio_PlayNatureAmbienceSequence(play->sequenceCtx.natureAmbienceId);
         } else if (sSong.prevSeq == NA_BGM_DISABLED) {
-            Audio_SeqCmd1(SEQ_PLAYER_BGM_MAIN, 0);
+            Audio_QueueSeqCmd(0x100000FF | ((u8)SEQ_PLAYER_BGM_MAIN << 24)); // (stopped)
         } else {
             SONG_START_SEQ(SEQ_PLAYER_BGM_MAIN, 0, sSong.prevSeq);
         }
