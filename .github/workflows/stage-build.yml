@@ -1,0 +1,31 @@
+name: stage-build
+# Puts a finished build's Windows zip on a draft release ("staging", not public), so it can be fetched for installing
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "generate-builds run id"
+        required: true
+permissions:
+  contents: write
+  actions: read
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: soh-windows
+          path: soh-windows
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Zip and upload to the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          (cd soh-windows && zip -qr ../soh-windows.zip .)
+          if ! gh release view staging >/dev/null 2>&1; then
+            gh release create staging --draft --title "staging (not public)" --notes "Draft: builds for installing." --target "${{ github.sha }}"
+          fi
+          gh release upload staging soh-windows.zip --clobber
