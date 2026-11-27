@@ -489,6 +489,12 @@ enum LineKind {
     L_WORRIED,
     L_HUG_COUNT, // every fifth hug ({n}: how many)
     L_ITEM_GET,  // Link got something big
+    L_JEALOUS,       // jealousy ({a}: her, {b}: the one she's jealous of)
+    L_JEALOUS_REPLY, // ({a}: her, {b}: the jealous one)
+    L_SLAP,          // in the slap fight
+    L_FIGHT_SEEN,    // someone watching it
+    L_CAUGHT,        // Link breaking it up
+    L_MAKEUP,        // after ({a}: her, {b}: the other)
     L_KIND_COUNT
 };
 static const char* sKindKey[L_KIND_COUNT] = { "enter",  "idle",     "low_health", "cheer",    "boss",     "night",
@@ -498,7 +504,8 @@ static const char* sKindKey[L_KIND_COUNT] = { "enter",  "idle",     "low_health"
                                               "let_go", "looked_at", "song_start", "song_listen", "song_end", "song_praise",
                                               "see_chest", "see_sign", "see_pot", "see_npc", "see_door", "see_skull",
                                               "see_stone", "see_item", "see_animal", "give", "tired", "bored", "glad", "worried", "hug_count",
-                                              "item_get" };
+                                              "item_get", "jealous", "jealous_reply", "slap", "fight_seen", "caught",
+                                              "makeup" };
 
 typedef std::vector<std::string> Lines;
 static Lines sLines[P_COUNT][L_KIND_COUNT];
@@ -1061,6 +1068,50 @@ static void BuildLines() {
     AddReact(EV_TIRED, -1, -1, { "{b}, you look sleepy.", "*yawn* ...Maybe we could rest a little?" });
     AddReact(EV_TIRED, P_MALON_Y, -1, { "{b}, you're yawning!", "Am not! ...*yaaawn*" });
 
+    // Jealousy and slap fights ({a}: her, {b}: the other girl)
+    Add(P_SARIA, L_JEALOUS, { "{b} sure gets a lot of Link's attention lately...", "Link... you haven't forgotten about me, have you?" });
+    Add(P_RUTO_Y, L_JEALOUS, { "Why does {b} get all the attention?! I'm the PRINCESS here!", "Hmph! {b}, {b}, {b}! What about ME?" });
+    Add(P_RUTO_A, L_JEALOUS, { "Hmph. {b} is certainly enjoying herself.", "Don't mind me. I'm only a Sage." });
+    Add(P_MALON_Y, L_JEALOUS, { "No fair! {b} always gets to do the fun stuff!", "Fairy boy likes {b} more than me..." });
+    Add(P_MALON_A, L_JEALOUS, { "Well, ain't {b} just Link's favorite today.", "Must be nice being {b}." });
+    Add(P_ZELDA_Y, L_JEALOUS, { "I suppose {b} is more interesting than me...", "Link spends so much time with {b}..." });
+    Add(P_ZELDA_A, L_JEALOUS, { "...It's nothing. {b} just seems to be doing everything lately.", "I'm fine. Really. Ask {b}, she seems to know everything." });
+    Add(P_SARIA, L_JEALOUS_REPLY, { "Huh? What did I do?", "{b}, are you jealous? That's silly!" });
+    Add(P_RUTO_Y, L_JEALOUS_REPLY, { "Jealous? Good.", "Hmph! Can I help it if I'm wonderful?" });
+    Add(P_RUTO_A, L_JEALOUS_REPLY, { "Is that jealousy I hear, {b}?", "Take it up with Link, not me." });
+    Add(P_MALON_Y, L_JEALOUS_REPLY, { "Hey! I didn't do anything!", "Meanie!" });
+    Add(P_MALON_A, L_JEALOUS_REPLY, { "Now don't you start with me, {b}.", "Somebody's grumpy." });
+    Add(P_ZELDA_Y, L_JEALOUS_REPLY, { "I-I'm sorry, I didn't mean to...", "{b}, that's not very fair." });
+    Add(P_ZELDA_A, L_JEALOUS_REPLY, { "There's no need for that, {b}.", "We're all on the same side here." });
+    Add(P_SARIA, L_SLAP, { "Take that!", "Hmph!", "Ow! Hey!", "Mido fights better than you!" });
+    Add(P_RUTO_Y, L_SLAP, { "That's it!", "HOW DARE YOU!", "Royal slap!", "Ow! My fins!" });
+    Add(P_RUTO_A, L_SLAP, { "That's enough!", "You asked for it!", "Ow!" });
+    Add(P_MALON_Y, L_SLAP, { "Meanie! Take that!", "Quit it!", "Ow ow ow!" });
+    Add(P_MALON_A, L_SLAP, { "Oh, it's ON!", "Quit it!", "Ow! You little...!" });
+    Add(P_ZELDA_Y, L_SLAP, { "Stop that this instant!", "Ow! That's unbecoming!", "Hmph!" });
+    Add(P_ZELDA_A, L_SLAP, { "Enough!", "You'll regret that!", "Ow!" });
+    Add(P_SARIA, L_FIGHT_SEEN, { "Hey! Stop fighting, you two!", "Link, do something!" });
+    Add(P_RUTO_Y, L_FIGHT_SEEN, { "Ooh, fight! Fight!", "Hit her harder! ...I mean, stop!" });
+    Add(P_RUTO_A, L_FIGHT_SEEN, { "Honestly. Children.", "Should I splash them?" });
+    Add(P_MALON_Y, L_FIGHT_SEEN, { "Stop it! Stop it!", "Ahh! Fairy boy, they're fighting!" });
+    Add(P_MALON_A, L_FIGHT_SEEN, { "Whoa, whoa! Break it up!", "Like two roosters in a pen..." });
+    Add(P_ZELDA_Y, L_FIGHT_SEEN, { "Please, stop! This isn't right!", "Oh dear..." });
+    Add(P_ZELDA_A, L_FIGHT_SEEN, { "Enough, both of you!", "This is beneath us." });
+    Add(P_SARIA, L_CAUGHT, { "...She started it!", "Oh! Link! We were just... playing!" });
+    Add(P_RUTO_Y, L_CAUGHT, { "She started it!", "I was WINNING, Link!" });
+    Add(P_RUTO_A, L_CAUGHT, { "...You didn't see anything.", "Ahem. Carry on, Link." });
+    Add(P_MALON_Y, L_CAUGHT, { "Sorry, fairy boy...", "She started it!" });
+    Add(P_MALON_A, L_CAUGHT, { "Heh... you saw that, huh?", "We were just horsing around." });
+    Add(P_ZELDA_Y, L_CAUGHT, { "Link! I... that was unbecoming.", "Please don't tell Impa." });
+    Add(P_ZELDA_A, L_CAUGHT, { "...Forgive me. That was childish.", "You didn't see that." });
+    Add(P_SARIA, L_MAKEUP, { "Sorry, {b}... friends again?", "I didn't mean it, {b}." });
+    Add(P_RUTO_Y, L_MAKEUP, { "...FINE. I forgive you, {b}. This time.", "Hmph. Truce." });
+    Add(P_RUTO_A, L_MAKEUP, { "Let's just forget it, {b}.", "I was out of line." });
+    Add(P_MALON_Y, L_MAKEUP, { "Sorry, {b}... wanna be friends again?", "Pinky promise we won't fight?" });
+    Add(P_MALON_A, L_MAKEUP, { "Shake on it, {b}?", "No hard feelings, huh?" });
+    Add(P_ZELDA_Y, L_MAKEUP, { "I'm sorry, {b}. That was unbecoming of a princess.", "Friends, {b}?" });
+    Add(P_ZELDA_A, L_MAKEUP, { "Forgive me, {b}. That wasn't like me.", "Let's put this behind us." });
+
     // Places
     AddScene(SCENE_KOKIRI_FOREST, P_SARIA, { "Home... it looks smaller now, doesn't it?" });
     AddScene(SCENE_KOKIRI_FOREST, P_RUTO_Y, { "So THIS is where you grew up? Everything's so tiny!" });
@@ -1212,7 +1263,7 @@ static void LoadExtraLines() {
 
 struct CompModel;
 
-enum CompState { ST_FOLLOW, ST_IDLE, ST_ATTACK, ST_SUPPORT, ST_HURT, ST_KO, ST_EMOTE, ST_TALK, ST_HUG, ST_REST, ST_EXPLORE };
+enum CompState { ST_FOLLOW, ST_IDLE, ST_ATTACK, ST_SUPPORT, ST_HURT, ST_KO, ST_EMOTE, ST_TALK, ST_HUG, ST_REST, ST_EXPLORE, ST_SQUABBLE };
 
 typedef struct {
     Actor actor;
@@ -1331,6 +1382,7 @@ struct MemEvent {
 static std::deque<MemEvent> sEvents;
 static u32 sClock = 0;
 static void Remember(int ev, int who);
+static f32 sAttention[COMP_COUNT]; // her share of Link's attention lately (for jealousy)
 
 // Bubbles: what each one is saying now, and lines waiting their turn (banter)
 struct Bubble {
@@ -2877,7 +2929,7 @@ static void Emote(Comp* c, const char* anim, s16 frames, s16 eye) {
     // (hand in hand she keeps walking with him)
     // (nor does one interrupt a hug, a talk, a song or her lying down: a hug left that way never ended)
     if ((anim == nullptr) || (c->holdSide != 0) || (c->state == ST_HUG) || (c->state == ST_TALK) ||
-        (c->state == ST_REST) || (c->state == ST_KO)) {
+        (c->state == ST_REST) || (c->state == ST_KO) || (c->state == ST_SQUABBLE)) {
         return;
     }
     c->state = ST_EMOTE;
@@ -3322,6 +3374,8 @@ static void UpdateRest(PlayState* play, Comp* c, Player* player) {
         c->eyeOverride = (sSong.music && (((sSong.frames + c->who * 37) / 90) % 2 == 1)) ? 1 : -1;
     }
 }
+
+static void UpdateSquabble(PlayState* play, Comp* c, Player* player);
 
 static void UpdateFace(Comp* c) {
     if (c->blinkTimer-- <= 0) {
@@ -4006,6 +4060,9 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
         case ST_EXPLORE:
             UpdateExplore(play, c, player);
             break;
+        case ST_SQUABBLE:
+            UpdateSquabble(play, c, player);
+            break;
         default:
             if (DoorWalk(play, c, player)) {
                 break;
@@ -4041,6 +4098,7 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
     if ((c->state != ST_KO) && (c->state != ST_ATTACK) && (c->state != ST_TALK) && (c->state != ST_HUG) &&
         (sHugWho < 0)) {
         if (Actor_ProcessTalkRequest(thisx, play)) {
+            sAttention[c->who] += 1.0f;
             c->state = ST_TALK;
             c->talkStage = 0;
             c->timer = 10;
@@ -4644,6 +4702,10 @@ static void Remember(int ev, int who) {
         default:
             break;
     }
+    if (who >= 0) {
+        static const f32 sWeight[EV_COUNT] = { 0.0f, 3.0f, 2.0f, 1.0f, 0.0f, 0.0f, 2.0f, 0.0f };
+        sAttention[who] += sWeight[ev];
+    }
     if ((count >= 0) && (who >= 0)) {
         sMem[who][count]++;
         // (a round number of hugs: she notices)
@@ -4874,6 +4936,270 @@ static void UpdateMoods(PlayState* play, Player* player) {
     }
 }
 
+// ---- Jealousy (and the odd slap fight) ----
+// Each girl's share of Link's attention lately: hugs, songs, finds, fights won, talks, holding hands. When one has
+// had a lot more than another, now and then (while he stands about) the other gets jealous and says so; and
+// sometimes it turns into a slap fight in a cloud of dust, until they're pulled apart (Link walking up to them) or
+// run out of steam, sulk with their backs turned, and make up.
+
+struct Squabble {
+    s8 a = -1, b = -1; // a is jealous of b
+    u8 phase = 0;      // 0 words, 1 a goes at b, 2 the fight, 3 sulking, 4 making up
+    bool slap = false;
+    s32 timer = 0;
+};
+static Squabble sSq;
+static s32 sJealousTimer = 0;
+
+static bool Squabbling(int w) {
+    return (sSq.a == w) || (sSq.b == w);
+}
+
+static void EndSquabble(bool madeUp) {
+    for (int w : { (int)sSq.a, (int)sSq.b }) {
+        if ((w >= 0) && (sComp[w] != nullptr) && (sComp[w]->state == ST_SQUABBLE)) {
+            sComp[w]->state = ST_FOLLOW;
+            sComp[w]->eyeOverride = -1;
+            sComp[w]->actor.shape.rot.z = 0;
+        }
+    }
+    if (madeUp && (sSq.a >= 0) && (sSq.b >= 0)) {
+        // (even again)
+        f32 even = (sAttention[sSq.a] + sAttention[sSq.b]) * 0.5f;
+        sAttention[sSq.a] = sAttention[sSq.b] = even;
+        Nudge(&sMood[sSq.a].cheer, 0.1f);
+        Nudge(&sMood[sSq.b].cheer, 0.1f);
+    }
+    sSq = Squabble();
+}
+
+static bool StartSquabble(PlayState* play, Player* player) {
+    if ((sSq.a >= 0) || (sSong.performer >= 0) || (sHugWho >= 0) || (play->msgCtx.msgMode != MSGMODE_NONE) ||
+        (CVarGetInteger(COMP_CVAR("Jealousy"), 1) == 0)) {
+        return false;
+    }
+    // The most and least attended of those standing about
+    int hi = -1, lo = -1;
+    for (int i = 0; i < COMP_COUNT; i++) {
+        Comp* c = sComp[i];
+        if ((c == nullptr) || c->hidden || (c->target != nullptr) || (c->holdSide != 0) ||
+            ((c->state != ST_FOLLOW) && (c->state != ST_IDLE) && (c->state != ST_EMOTE))) {
+            continue;
+        }
+        if (FindTarget(play, c) != nullptr) {
+            return false;
+        }
+        if ((hi < 0) || (sAttention[i] > sAttention[hi])) {
+            hi = i;
+        }
+        if ((lo < 0) || (sAttention[i] < sAttention[lo])) {
+            lo = i;
+        }
+    }
+    if ((hi < 0) || (lo < 0) || (hi == lo) || (sAttention[hi] - sAttention[lo] < Tune("jealous_gap", 4.0f))) {
+        return false;
+    }
+    sSq.a = (s8)lo;
+    sSq.b = (s8)hi;
+    sSq.phase = 0;
+    sSq.timer = 0;
+    // (the bigger the gap, the likelier it comes to blows)
+    f32 gap = sAttention[hi] - sAttention[lo];
+    sSq.slap = Rand_ZeroOne() < Tune("slap_chance", 0.35f) * CLAMP(gap / 8.0f, 0.6f, 1.6f);
+    for (int w : { lo, hi }) {
+        sComp[w]->state = ST_SQUABBLE;
+        sComp[w]->actor.speedXZ = 0.0f;
+        sComp[w]->wandering = 0;
+    }
+    Comp* a = sComp[lo];
+    Comp* b = sComp[hi];
+    std::string an = Def(a).name, bn = Def(b).name;
+    std::string l1 = Fill(Pick(sLines[a->persona][L_JEALOUS]), an, bn, 0);
+    std::string l2 = Fill(Pick(sLines[b->persona][L_JEALOUS_REPLY]), bn, an, 0);
+    s32 gapFrames = (s32)(Tune("bubble_seconds", 2.5f) * COMP_FPS + (f32)l1.size() * 0.9f) + 6;
+    sPending.push_back({ lo, l1, 0 });
+    sPending.push_back({ hi, l2, gapFrames });
+    return true;
+}
+
+static void UpdateSquabbleManager(PlayState* play, Player* player) {
+    // Attention fades (half in about five minutes)
+    for (int i = 0; i < COMP_COUNT; i++) {
+        sAttention[i] *= 1.0f - 1.0f / (Tune("attention_halflife_seconds", 300.0f) * 1.44f * COMP_FPS);
+        if ((sComp[i] != nullptr) && (sComp[i]->holdSide != 0)) {
+            sAttention[i] += 0.5f / (10.0f * COMP_FPS); // (hand in hand: a little, all the while)
+        }
+    }
+    if (sSq.a < 0) {
+        // Now and then, while he stands about
+        if (--sJealousTimer <= 0) {
+            sJealousTimer = (s32)((Tune("jealous_min_seconds", 60.0f) + Rand_ZeroOne() * Tune("jealous_extra_seconds", 90.0f)) * COMP_FPS);
+            if (sStillFrames > (s32)(Tune("jealous_still_seconds", 4.0f) * COMP_FPS)) {
+                StartSquabble(play, player);
+            } else {
+                sJealousTimer = 5 * COMP_FPS; // (try again soon)
+            }
+        }
+        return;
+    }
+    Comp* a = sComp[sSq.a];
+    Comp* b = sComp[sSq.b];
+    if ((a == nullptr) || (b == nullptr) || (a->state != ST_SQUABBLE) || (b->state != ST_SQUABBLE)) {
+        EndSquabble(false);
+        return;
+    }
+    sSq.timer++;
+    Vec3f mid = { (a->actor.world.pos.x + b->actor.world.pos.x) * 0.5f, a->actor.world.pos.y,
+                  (a->actor.world.pos.z + b->actor.world.pos.z) * 0.5f };
+    f32 linkNear = Math_Vec3f_DistXZ(&player->actor.world.pos, &mid);
+    switch (sSq.phase) {
+        case 0: // words
+            if (sSq.timer > (s32)(5.5f * COMP_FPS)) {
+                sSq.timer = 0;
+                if (sSq.slap) {
+                    sSq.phase = 1;
+                    std::string l = Pick(sLines[a->persona][L_SLAP]);
+                    if (!l.empty()) {
+                        sPending.push_back({ sSq.a, l, 0 });
+                    }
+                } else {
+                    sSq.phase = 3; // (just a sulk)
+                }
+            }
+            break;
+        case 1: // she goes at her
+            if ((Actor_WorldDistXZToActor(&a->actor, &b->actor) < 26.0f) || (sSq.timer > 3 * COMP_FPS)) {
+                sSq.phase = 2;
+                sSq.timer = 0;
+                // Someone else sees it
+                for (int i = 0; i < COMP_COUNT; i++) {
+                    if ((i != sSq.a) && (i != sSq.b) && Present(i)) {
+                        std::string l = Pick(sLines[sComp[i]->persona][L_FIGHT_SEEN]);
+                        if (!l.empty()) {
+                            sPending.push_back({ i, l, 20 });
+                        }
+                        break;
+                    }
+                }
+            }
+            break;
+        case 2: { // the fight: a cloud of dust, slaps, stars
+            if ((sSq.timer % 7) == 0) {
+                Vec3f p = mid;
+                p.y += Def(a).height * a->actor.scale.y * 0.6f + Rand_CenteredFloat(12.0f);
+                p.x += Rand_CenteredFloat(18.0f);
+                p.z += Rand_CenteredFloat(18.0f);
+                EffectSsHitMark_SpawnFixedScale(play, 0, &p);
+                Audio_PlayActorSound2(((sSq.timer / 7) % 2) ? &a->actor : &b->actor, NA_SE_PL_BODY_HIT);
+            }
+            if ((sSq.timer % 9) == 0) {
+                func_80033480(play, &mid, 35.0f, 3, 120, 30, 1);
+            }
+            if ((sSq.timer % 25) == 12) {
+                Comp* who = ((sSq.timer / 25) % 2) ? a : b;
+                Voice(&who->actor, ((sSq.timer / 25) % 3) ? Def(who).voiceAttack : Def(who).voiceHurt);
+                if (Rand_ZeroOne() < 0.45f) {
+                    Say(who->who, Pick(sLines[who->persona][L_SLAP]));
+                }
+            }
+            // Link walking up breaks it up; or they run out of steam
+            if ((linkNear < Tune("break_up_distance", 70.0f)) && (sSq.timer > 15)) {
+                sSq.phase = 3;
+                sSq.timer = 0;
+                std::string l = Pick(sLines[a->persona][L_CAUGHT]);
+                if (!l.empty()) {
+                    sPending.push_back({ sSq.a, l, 0 });
+                }
+            } else if (sSq.timer > (s32)(Tune("slap_seconds", 4.0f) * COMP_FPS)) {
+                sSq.phase = 3;
+                sSq.timer = 0;
+            }
+            break;
+        }
+        case 3: // backs turned, sulking
+            if (sSq.timer > (s32)(Tune("sulk_seconds", 6.0f) * COMP_FPS)) {
+                sSq.phase = 4;
+                sSq.timer = 0;
+                std::string an = Def(a).name, bn = Def(b).name;
+                std::string l1 = Fill(Pick(sLines[a->persona][L_MAKEUP]), an, bn, 0);
+                std::string l2 = Fill(Pick(sLines[b->persona][L_MAKEUP]), bn, an, 0);
+                sPending.push_back({ sSq.a, l1, 0 });
+                sPending.push_back({ sSq.b, l2, (s32)(Tune("bubble_seconds", 2.5f) * COMP_FPS + (f32)l1.size() * 0.9f) + 6 });
+            }
+            break;
+        default: // making up
+            if (sSq.timer > (s32)(4.5f * COMP_FPS)) {
+                Emote(a, Def(a).happy, 30, -1);
+                Emote(b, Def(b).happy, 30, -1);
+                EndSquabble(true);
+            }
+            break;
+    }
+}
+
+// Her part in it
+static void UpdateSquabble(PlayState* play, Comp* c, Player* player) {
+    const PersonaDef& d = Def(c);
+    bool isA = (sSq.a == c->who);
+    Comp* other = sComp[isA ? sSq.b : sSq.a];
+    if ((sSq.a < 0) || (other == nullptr)) {
+        c->state = ST_FOLLOW;
+        return;
+    }
+    s16 toOther = Math_Vec3f_Yaw(&c->actor.world.pos, &other->actor.world.pos);
+    switch (sSq.phase) {
+        case 0: // words: facing each other, hands on hips
+            c->actor.speedXZ = 0.0f;
+            Math_SmoothStepToS(&c->actor.shape.rot.y, toOther, 3, 0x1000, 0x100);
+            SetAnim(c, (d.pout != nullptr) ? d.pout : d.idle, 1.0f, ANIMMODE_LOOP, -6.0f);
+            break;
+        case 1:
+            if (isA) {
+                c->actor.world.rot.y = toOther;
+                Math_SmoothStepToS(&c->actor.shape.rot.y, toOther, 3, 0x1800, 0x100);
+                f32 dd = Actor_WorldDistXZToActor(&c->actor, &other->actor);
+                Math_ApproachF(&c->actor.speedXZ, (dd > 26.0f) ? Tune("walk_speed", 2.5f) * 1.8f : 0.0f, 0.5f, 1.0f);
+                bool mixWalk = MixamoOn() && (c->rigState == 1) && (c->rig.lThigh != 0);
+                if ((d.move != nullptr) && !mixWalk && !(c->linkWalk && CVarGetInteger(COMP_CVAR("LinkWalk"), 1))) {
+                    SetAnim(c, d.move, std::max(0.6f, c->actor.speedXZ * d.moveAnimSpeed), ANIMMODE_LOOP, -5.0f);
+                }
+            } else {
+                c->actor.speedXZ = 0.0f;
+                Math_SmoothStepToS(&c->actor.shape.rot.y, toOther, 3, 0x1000, 0x100);
+                SetAnim(c, (d.worried != nullptr) ? d.worried : d.idle, 1.0f, ANIMMODE_LOOP, -6.0f);
+            }
+            break;
+        case 2: { // flailing at each other, jittering about
+            c->actor.speedXZ = 0.0f;
+            s16 jitter = (s16)Rand_CenteredFloat(0x1400);
+            c->actor.shape.rot.y = (s16)(toOther + jitter);
+            c->actor.shape.rot.z = (s16)Rand_CenteredFloat(0x0C00);
+            const char* swing = (d.melee != nullptr) ? d.melee : d.happy;
+            if ((c->anim != swing) || (c->skel.curFrame >= c->skel.endFrame - 1.0f)) {
+                c->anim = nullptr; // (again)
+                SetAnim(c, swing, 1.6f + Rand_ZeroOne() * 0.6f, ANIMMODE_ONCE, -2.0f);
+            }
+            c->eyeOverride = ((sSq.timer / 5) % 3 == 0) ? 2 : -1;
+            c->mouthTimer = 4;
+            break;
+        }
+        case 3: // sulking, backs turned
+            c->actor.speedXZ = 0.0f;
+            Math_SmoothStepToS(&c->actor.shape.rot.y, (s16)(toOther + 0x8000), 3, 0x1000, 0x100);
+            c->actor.shape.rot.z = 0;
+            SetAnim(c, (d.pout != nullptr) ? d.pout : d.idle, 1.0f, ANIMMODE_LOOP, -6.0f);
+            c->eyeOverride = 1;
+            break;
+        default: // turning back round
+            c->actor.speedXZ = 0.0f;
+            Math_SmoothStepToS(&c->actor.shape.rot.y, toOther, 3, 0x800, 0x100);
+            SetAnim(c, d.idle, 1.0f, ANIMMODE_LOOP, -8.0f);
+            c->eyeOverride = -1;
+            break;
+    }
+    c->actor.world.rot.y = (sSq.phase == 1 && isA) ? c->actor.world.rot.y : c->actor.shape.rot.y;
+}
+
 static void OnFrame() {
     PlayState* play = gPlayState;
 
@@ -4902,6 +5228,7 @@ static void OnFrame() {
     }
     UpdateSong(play, player);
     UpdateMoods(play, player);
+    UpdateSquabbleManager(play, player);
     FollowThroughDoor(play, player);
     // Everyone who's on, at Link's side
     for (int i = 0; i < COMP_COUNT; i++) {
@@ -5091,6 +5418,7 @@ static void OnSceneInit(int16_t sceneNum) {
     sSong.music = false;
     sPoiSeenCount = 0;
     sLastRoom = -2;
+    sSq = Squabble();
     SaveMemory();
     for (int i = 0; i < COMP_COUNT; i++) {
         sMood[i].boredom *= 0.5f; // (somewhere new)

@@ -1967,6 +1967,15 @@ void SohMenu::AddMenuEnhancements() {
         .Options(CheckboxOptions().DefaultValue(true).Tooltip(
             "While Link lingers, the girls wander off to look at what catches their eye (chests, signs, people, "
             "animals, Gold Skulltulas...) and point it out. They never open, break or take anything."));
+    AddWidget(path, "Companions Jealousy", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Companions.Jealousy"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "When one girl gets a lot more of Link's attention than another (hugs, songs, finds, talks), the other "
+            "gets jealous now and then while he stands about, and sometimes it ends in a slap fight. Walk up to "
+            "them to break it up."));
     AddWidget(path, "Companions Rest Songs", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("Companions.RestSongs"))
         .PreFunc([](WidgetInfo& info) {
