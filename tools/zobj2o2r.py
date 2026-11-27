@@ -109,7 +109,8 @@ def convert(zf, base, path):
             elif op == 0xDE and seg == 6:
                 off = w1 & 0xFFFFFF
                 pending.append(off)
-                out += struct.pack('>II', (0x31 << 24) | (w0 & 0xFFFFFF), 0)
+                # (always a call: a branch becomes a call and the list ends right after it)
+                out += struct.pack('>II', (0x31 << 24) | (w0 & 0x00FFFF), 0)
                 h = crc64(base + '/dl_%06X' % off)
                 out += struct.pack('>II', h >> 32, h & 0xFFFFFFFF)
                 if (w0 >> 16) & 0xFF == 1:
