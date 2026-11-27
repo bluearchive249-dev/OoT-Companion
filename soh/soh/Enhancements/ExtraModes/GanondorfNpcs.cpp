@@ -1,0 +1,209 @@
+// Copyright (c) 2026 Grimsfrost. All rights reserved. No copying, editing or additions, by people or AI tools, without the author's written consent. See AI-POLICY.md.
+// Play as Ganondorf: what the people of Hyrule say to him. Hylians fear him, the Gerudo respect their king, the Gorons
+// and Zoras hate the man who cursed their homes, the Kokiri and the Sheikah are wary of him or stand up to him. Each
+// line replaces the game's own text with the same id; its sounds, colours and follow-on lines are kept, and every
+// hint or direction it gave is still in it. English only (other languages keep the game's text).
+#include <string>
+#include <unordered_map>
+#include <libultraship/bridge/consolevariablebridge.h>
+#include <ship/Context.h>
+#include <ship/window/Window.h>
+#include "soh/cvar_prefixes.h"
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/custom-message/CustomMessageManager.h"
+#include "GanondorfText.h"
+#include "GanondorfTuning.h"
+#include "soh/ShipInit.hpp"
+
+extern "C" {
+#include "z64.h"
+#include "variables.h"
+extern PlayState* gPlayState;
+s32 BossGanon_Player_IsSoloGanondorf(void);
+}
+
+namespace {
+
+struct NpcLine {
+    uint8_t type;     // the box, as the game's message table has it
+    uint8_t position;
+    std::string text;
+};
+
+const std::unordered_map<uint16_t, NpcLine> sNpcLines = {
+#include "GanondorfNpcLines.inc"
+};
+
+// His own part of the conversation: a greeting before the NPC's line and a goodbye after it, written for that one
+// conversation (Kokiri Forest so far; every other conversation takes its lines from its people's, see PoolFor)
+struct NpcTalk {
+    const char* greeting;
+    const char* goodbye;
+};
+const std::unordered_map<uint16_t, NpcTalk> sNpcTalk = {
+#include "GanondorfNpcTalk.inc"
+};
+
+// For every other conversation: greetings and goodbyes by the people he's speaking to (their attitude to him, and his
+// to them), a pair picked by the line's id (so a conversation always has the same pair, and its neighbours others)
+#include "GanondorfNpcPools.inc"
+
+struct TalkPool {
+    const char* const* greet;
+    size_t numGreet;
+    const char* const* bye;
+    size_t numBye;
+    const char* const* reply;
+    size_t numReply;
+};
+#define POOL(name)                                                                                              \
+    { s##name##Greet, sizeof(s##name##Greet) / sizeof(char*), s##name##Bye,   sizeof(s##name##Bye) / sizeof(char*), \
+      s##name##Reply, sizeof(s##name##Reply) / sizeof(char*) }
+
+const TalkPool* PoolFor(uint16_t textId) {
+    static const TalkPool kokiri = POOL(Kokiri), ranch = POOL(Ranch), goron = POOL(Goron), zora = POOL(Zora),
+                          kakariko = POOL(Kakariko), gerudo = POOL(Gerudo), hylian = POOL(Hylian);
+
+    switch (textId >> 8) {
+        case 0x10:
+            return &kokiri;
+        case 0x20:
+            return &ranch;
+        case 0x30:
+            return &goron;
+        case 0x40:
+            return &zora;
+        case 0x50:
+            return &kakariko;
+        case 0x60:
+            return &gerudo;
+        case 0x70:
+        case 0x71:
+            return &hylian;
+        default:
+            return nullptr;
+    }
+}
+
+// Does the line end the talk as far as its text shows? (not one with a choice, a follow-on line, an event, a shop's
+// or a timed box: his last word would come in the middle)
+bool EndsPlainly(const std::string& text) {
+    return text.find_first_of("\x07\x0A\x0B\x0E\x10\x1B\x1C") == std::string::npos;
+}
+
+void OnOpenText(uint16_t* textId, bool* loadFromMessageTable) {
+    if (!CVarGetInteger(CVAR_ENHANCEMENT("PlayAsGanondorf.Enabled"), 1) ||
+        !CVarGetInteger(CVAR_ENHANCEMENT("PlayAsGanondorf.NpcDialogue"), 0) ||
+        (gSaveContext.language != LANGUAGE_ENG) || !*loadFromMessageTable) {
+        return; // (another of his hooks already gave this line its own text)
+    }
+    auto it = sNpcLines.find(*textId);
+    if (it == sNpcLines.end()) {
+        return;
+    }
+    std::string text = it->second.text;
+    auto talk = sNpcTalk.find(*textId);
+    const TalkPool* pool = PoolFor(*textId);
+    // (a new conversation: no text box is up yet; a line that follows another in the same talk gets nothing)
+    bool opening = (gPlayState != nullptr) && (gPlayState->msgCtx.msgMode == MSGMODE_NONE);
+
+    if ((talk == sNpcTalk.end()) && (pool != nullptr) && opening) {
+        uint16_t id = *textId;
+        size_t end = text.rfind('\x02');
+
+        if (end != std::string::npos) {
+            std::string body = text.substr(0, end);
+            std::string out = GdfFitBoxesRaw(pool->greet[(id * 7 + (id >> 4)) % pool->numGreet]) + "\x04" + body;
+
+            if (EndsPlainly(body)) {
+                out += std::string("\x04") + GdfFitBoxesRaw(pool->bye[(id * 13 + 5) % pool->numBye]);
+            }
+            text = out + text.substr(end);
+        }
+    } else if ((talk == sNpcTalk.end()) && (pool != nullptr) && !opening) {
+        // Their next line in the same talk: his reply to what they just said, first (never the same one twice
+        // running)
+        static size_t sLastReply = (size_t)-1;
+        size_t i = ((*textId) * 11 + ((*textId) >> 3)) % pool->numReply;
+        size_t end = text.rfind('\x02');
+
+        if (i == sLastReply) {
+            i = (i + 1) % pool->numReply;
+        }
+        sLastReply = i;
+        if (end != std::string::npos) {
+            std::string body = text.substr(0, end);
+
+            text = GdfFitBoxesRaw(pool->reply[i]) + "\x04" + body;
+            if (EndsPlainly(body)) {
+                text += std::string("\x04") + GdfFitBoxesRaw(pool->bye[((*textId) * 13 + 5) % pool->numBye]);
+            }
+            text += "\x02";
+        }
+    } else if (talk != sNpcTalk.end()) {
+        // His words answer theirs, so they come after: their line first, then his reaction and his answer (\x04
+        // starts a new box, \x02 ends the message). Where their line goes on into another (a jump at its end), his
+        // reaction comes in just before the jump. Only before a choice, a song or an event, where nothing may come
+        // after their words, does he speak first.
+        size_t end = text.rfind('\x02');
+        if (end != std::string::npos) {
+            std::string body = text.substr(0, end);
+            std::string his = GdfFitBoxesRaw(talk->second.greeting);
+            size_t code = body.find_first_of("\x07\x0A\x0B\x0E\x10\x1B\x1C");
+
+            if (talk->second.goodbye[0] != '\0') {
+                his += std::string("\x04") + GdfFitBoxesRaw(talk->second.goodbye);
+            }
+            if (code == std::string::npos) {
+                text = body + "\x04" + his + text.substr(end);
+            } else if ((body[code] == '\x07') && (code + 3 == body.size())) {
+                // (their line, his words, then on to their next line)
+                text = body.substr(0, code) + "\x04" + his + body.substr(code) + text.substr(end);
+            } else {
+                text = GdfFitBoxesRaw(talk->second.greeting) + "\x04" + body + text.substr(end);
+            }
+        }
+    }
+    CustomMessage msg = CustomMessage(text, (TextBoxType)it->second.type, (TextBoxPosition)it->second.position);
+    *loadFromMessageTable = false;
+    msg.LoadIntoFont();
+}
+
+// The tunics, renamed in what the game says of them (as on his equipment screen): the Kokiri Tunic his Royal Cape, the
+// Goron Tunic his Fire Mantle, the Zora Tunic his Ice Mantle. Any line the other hooks left alone that names one.
+void OnOpenTextCapes(uint16_t* textId, bool* loadFromMessageTable) {
+    if (!*loadFromMessageTable || (gSaveContext.language != LANGUAGE_ENG) || !BossGanon_Player_IsSoloGanondorf() ||
+        (GdfTune("icons.capes", 1.0f) == 0.0f)) {
+        return;
+    }
+    CustomMessage msg = CustomMessage::LoadVanillaMessageTableEntry(*textId);
+    std::string text = msg.GetEnglish(MF_RAW);
+
+    if ((text.find("Tunic") == std::string::npos) && (text.find("tunic") == std::string::npos)) {
+        return;
+    }
+    msg.Replace("Kokiri Tunic", "Royal Cape");
+    msg.Replace("Goron Tunic", "Fire Mantle");
+    msg.Replace("Zora Tunic", "Ice Mantle");
+    msg.Replace("Tunics", "Mantles");
+    msg.Replace("tunics", "mantles");
+    msg.Replace("Tunic", "Mantle");
+    msg.Replace("tunic", "mantle");
+    *loadFromMessageTable = false;
+    msg.LoadIntoFont();
+}
+
+void RegisterNpcs() {
+    // Off by default while it's reworked (once only: it used to be on, and a saved setting kept it on)
+    if (!CVarGetInteger(CVAR_ENHANCEMENT("PlayAsGanondorf.NpcDialogueReset"), 0)) {
+        CVarSetInteger(CVAR_ENHANCEMENT("PlayAsGanondorf.NpcDialogue"), 0);
+        CVarSetInteger(CVAR_ENHANCEMENT("PlayAsGanondorf.NpcDialogueReset"), 1);
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    }
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnOpenText>(OnOpenText);
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnOpenText>(OnOpenTextCapes);
+}
+
+} // namespace
+
+static RegisterShipInitFunc initFunc(RegisterNpcs, {});
