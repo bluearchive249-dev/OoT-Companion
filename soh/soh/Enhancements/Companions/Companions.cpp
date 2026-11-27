@@ -1075,6 +1075,7 @@ typedef struct {
 } Comp;
 
 static s16 sHugWho = -1;
+static bool sLinkSits = false; // Link sitting down with them for a song
 static CompModel* FindModel(int persona);
 
 static s16 sCompActorId = -1;
@@ -1592,8 +1593,8 @@ static bool LinkSwimming(Player* player) {
 }
 
 static bool LinkBusy(PlayState* play, Player* player) {
-    if (sHugWho >= 0) {
-        return false; // (a hug holds him still; that's not a cutscene)
+    if ((sHugWho >= 0) || sLinkSits) {
+        return false; // (a hug, or sitting for a song, holds him still; that's not a cutscene)
     }
     // Only real cutscenes: talking (to them or anyone), opening chests, playing the ocarina and the like keep them
     // in view
@@ -2050,15 +2051,28 @@ static void Emote(Comp* c, const char* anim, s16 frames, s16 eye) {
 // During a hug the right stick turns the camera freely (the game's free look, switched on just for the hug)
 static s8 sHugFreeLookWas = -1;
 
+// The right stick turns the camera while Link is held still (a hug, sitting for a song)
+static void HeldCameraOn() {
+    if (sHugFreeLookWas < 0) {
+        sHugFreeLookWas = (s8)CVarGetInteger(CVAR_SETTING("FreeLook.Enabled"), 0);
+        CVarSetInteger(CVAR_SETTING("FreeLook.Enabled"), 1);
+    }
+}
+static void HeldCameraOff(PlayState* play) {
+    if (sHugFreeLookWas == 0) {
+        CVarSetInteger(CVAR_SETTING("FreeLook.Enabled"), 0);
+        if (play != nullptr) {
+            play->manualCamera = false;
+        }
+    }
+    sHugFreeLookWas = -1;
+}
+
 static void EndHug(PlayState* play, Comp* c) {
     if (sHugWho == c->who) {
         sHugWho = -1;
         Player_SetCsAction(play, nullptr, PLAYER_CSACTION_7); // (he's free again)
-        if (sHugFreeLookWas == 0) {
-            CVarSetInteger(CVAR_SETTING("FreeLook.Enabled"), 0);
-            play->manualCamera = false;
-        }
-        sHugFreeLookWas = -1;
+        HeldCameraOff(play);
     }
     c->state = ST_FOLLOW;
     c->eyeOverride = -1;
@@ -2068,10 +2082,7 @@ static void EndHug(PlayState* play, Comp* c) {
 static void StartHug(PlayState* play, Comp* c, Player* player) {
     c->state = ST_HUG;
     c->timer = 0; // (frames into the hug: it lasts until he lets go)
-    if (sHugFreeLookWas < 0) {
-        sHugFreeLookWas = (s8)CVarGetInteger(CVAR_SETTING("FreeLook.Enabled"), 0);
-        CVarSetInteger(CVAR_SETTING("FreeLook.Enabled"), 1);
-    }
+    HeldCameraOn();
     c->actor.speedXZ = 0.0f;
     c->mouthTimer = 0;
     sHugWho = c->who;
@@ -2204,6 +2215,15 @@ static void EndSong(PlayState* play, bool finished) {
         return;
     }
     int performer = sSong.performer;
+    if (sLinkSits) {
+        sLinkSits = false;
+        if (play != nullptr) {
+            Player_SetCsAction(play, nullptr, PLAYER_CSACTION_7); // (he gets up)
+            if (sHugWho < 0) {
+                HeldCameraOff(play);
+            }
+        }
+    }
     sSong.last = sSong.performer;
     sSong.performer = -1;
     // The music back as it was (unless something else has changed it since)
@@ -2348,6 +2368,21 @@ static void UpdateSong(PlayState* play, Player* player) {
         sSong.music = true;
         sSong.prevSeq = func_800FA0B4(SEQ_PLAYER_BGM_MAIN);
         SONG_START_SEQ(SEQ_PLAYER_BGM_MAIN, 0, sSong.seq);
+        // Link sits down with them, facing her (the right stick turns the camera)
+        if ((Tune("link_sits", 1.0f) != 0.0f) && (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
+            sLinkSits = true;
+            s16 yaw = Math_Vec3f_Yaw(&player->actor.world.pos, &p->actor.world.pos);
+            player->actor.shape.rot.y = player->actor.world.rot.y = player->yaw = yaw;
+            Player_SetCsAction(play, nullptr, PLAYER_CSACTION_93);
+            HeldCameraOn();
+        }
+    }
+    if (sLinkSits) {
+        if (player->csAction != PLAYER_CSACTION_93) {
+            Player_SetCsAction(play, nullptr, PLAYER_CSACTION_93);
+        } else if (player->skelAnime.animation != (LinkAnimationHeader*)LINK_WAIT) {
+            LinkAnimation_PlayLoop(play, &player->skelAnime, (LinkAnimationHeader*)LINK_WAIT);
+        }
     }
     if (sSong.music) {
         if (sSong.seq == NA_BGM_LONLON) {
@@ -2563,6 +2598,12 @@ static const float sHugDirs[8][3] = { { 0, 0, 0 },
                                       { 0.95f, 0.05f, 0.3f } };
 static const bool sHugUse[8] = { false, false, false, false, true, true, true, true };
 
+// Sitting on the ground: knees up, hands on the knees
+static const float sSitDirs[8][3] = { { 0.18f, 0.35f, 0.92f },  { 0.05f, -0.55f, 0.83f },  { -0.18f, 0.35f, 0.92f },
+                                      { -0.05f, -0.55f, 0.83f }, { 0.25f, -0.75f, 0.6f },   { 0.05f, -0.35f, 0.94f },
+                                      { -0.25f, -0.75f, 0.6f },  { -0.05f, -0.35f, 0.94f } };
+static const bool sSitUse[8] = { true, true, true, true, true, true, true, true };
+
 // A point in the world, in an actor's model frame (its units, before its scale)
 static Vec3f WorldToModel(Actor* a, Vec3f w) {
     f32 dx = w.x - a->world.pos.x, dy = w.y - a->world.pos.y, dz = w.z - a->world.pos.z;
@@ -2591,6 +2632,7 @@ static Vec3f HoldMeetPoint(Comp* c, Player* player) {
 extern "C" void (*gCompanionPlayerLimbHook)(PlayState* play, s32 limbIndex, Vec3f* pos, Vec3s* rot, Player* player);
 static CompRigOut sLinkOut;
 static f32 sLinkHug = 0.0f;
+static f32 sLinkSit = 0.0f;
 static const CompRigMap sLinkRig = { 7, 8, 9, 4, 5, 6, 14, 15, 16, 17, 18, 19 };
 
 static void LinkLimbHook(PlayState* play, s32 limbIndex, Vec3f* pos, Vec3s* rot, Player* player) {
@@ -2604,6 +2646,17 @@ static void LinkLimbHook(PlayState* play, s32 limbIndex, Vec3f* pos, Vec3s* rot,
         Math_ApproachF(&sLinkHug, (sHugWho >= 0) ? 1.0f : 0.0f, 0.3f, 0.15f);
         if (sLinkHug > 0.0f) {
             CompRig_SolveDirs(&player->skelAnime, &sLinkRig, sHugDirs, sHugUse, sLinkHug, &sLinkOut);
+        }
+        // Sitting with them for a song: his hips down near the ground (a child's root height is scaled by 0.64
+        // after this, so the drop is worked out before that)
+        Math_ApproachF(&sLinkSit, sLinkSits ? 1.0f : 0.0f, 0.25f, 0.08f);
+        if (sLinkSit > 0.0f) {
+            CompRig_SolveDirs(&player->skelAnime, &sLinkRig, sSitDirs, sSitUse, sLinkSit, &sLinkOut);
+            f32 k = LINK_IS_ADULT ? 1.0f : 0.64f;
+            f32 leg = CompRig_LegLength(&player->skelAnime, &sLinkRig);
+            f32 hipSit = leg * Tune("link_sit_hip", 0.14f);
+            f32 hipNow = (f32)player->skelAnime.jointTable[0].y * k;
+            sLinkOut.rootDY = (hipSit - hipNow) / k * sLinkSit;
         }
         for (int i = 0; i < COMP_COUNT; i++) {
             Comp* c = sComp[i];
@@ -2619,6 +2672,9 @@ static void LinkLimbHook(PlayState* play, s32 limbIndex, Vec3f* pos, Vec3s* rot,
         rot->x = sLinkOut.rot[limbIndex][0];
         rot->y = sLinkOut.rot[limbIndex][1];
         rot->z = sLinkOut.rot[limbIndex][2];
+    }
+    if ((limbIndex == 1) && (sLinkOut.mask != 0)) {
+        pos->y += sLinkOut.rootDY;
     }
 }
 
@@ -2795,10 +2851,6 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
     // Sitting on the ground: knees up, hips down near the ground, her hands on her knees (unless her arms are busy
     // with an ocarina or a song)
     if (c->sitAmount > 0.0f) {
-        static const float sSitDirs[8][3] = { { 0.18f, 0.35f, 0.92f },  { 0.05f, -0.55f, 0.83f },
-                                              { -0.18f, 0.35f, 0.92f }, { -0.05f, -0.55f, 0.83f },
-                                              { 0.25f, -0.75f, 0.6f },  { 0.05f, -0.35f, 0.94f },
-                                              { -0.25f, -0.75f, 0.6f }, { -0.05f, -0.35f, 0.94f } };
         const PersonaDef& d = Def(c);
         bool armsFree = (c->model != nullptr) || ((c->anim == d.idle) && (c->persona != P_RUTO_Y)) ||
                         ((c->persona == P_SARIA) && (c->anim == d.sit));
@@ -3472,11 +3524,7 @@ static void OnFrame() {
     if ((sHugWho >= 0) && ((sComp[sHugWho] == nullptr) || (sComp[sHugWho]->state != ST_HUG))) {
         sHugWho = -1;
         Player_SetCsAction(play, nullptr, PLAYER_CSACTION_7);
-        if (sHugFreeLookWas == 0) {
-            CVarSetInteger(CVAR_SETTING("FreeLook.Enabled"), 0);
-            play->manualCamera = false;
-        }
-        sHugFreeLookWas = -1;
+        HeldCameraOff(play);
     }
     if (LinkBusy(play, player)) {
         EndSong(play, false);
@@ -3657,6 +3705,12 @@ static void OnSceneInit(int16_t sceneNum) {
     // (a new place has its own music: nothing to give back)
     sSong.performer = -1;
     sSong.music = false;
+    if (sLinkSits) {
+        sLinkSits = false;
+        if (sHugWho < 0) {
+            HeldCameraOff(gPlayState);
+        }
+    }
     for (int i = 0; i < COMP_COUNT; i++) {
         sComp[i] = nullptr; // (the scene's actors are gone)
         sBubble[i].frames = 0;
