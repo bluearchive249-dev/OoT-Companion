@@ -163,7 +163,8 @@ void Parents(SkelAnime* skel, int i, int parent, Pose* p) {
 }
 
 bool Build(SkelAnime* skel, Pose* p) {
-    p->count = skel->limbCount;
+    // (the game's count has one more: the root's position in the joint table)
+    p->count = (int)skel->limbCount - 1;
     if ((p->count <= 0) || (p->count > kMaxLimbs) || (skel->skeleton == nullptr) || (skel->jointTable == nullptr)) {
         return false;
     }
