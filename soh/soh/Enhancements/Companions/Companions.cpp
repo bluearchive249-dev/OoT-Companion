@@ -482,6 +482,13 @@ enum LineKind {
     L_SEE_STONE,
     L_SEE_ITEM,
     L_SEE_ANIMAL,
+    L_GIVE, // bringing Link what was in a pot, or lying about
+    L_TIRED, // moods, when she chats
+    L_BORED,
+    L_GLAD,
+    L_WORRIED,
+    L_HUG_COUNT, // every fifth hug ({n}: how many)
+    L_ITEM_GET,  // Link got something big
     L_KIND_COUNT
 };
 static const char* sKindKey[L_KIND_COUNT] = { "enter",  "idle",     "low_health", "cheer",    "boss",     "night",
@@ -490,13 +497,18 @@ static const char* sKindKey[L_KIND_COUNT] = { "enter",  "idle",     "low_health"
                                               "water",  "wait",     "prompt",     "hug",      "hug_seen", "hold",
                                               "let_go", "looked_at", "song_start", "song_listen", "song_end", "song_praise",
                                               "see_chest", "see_sign", "see_pot", "see_npc", "see_door", "see_skull",
-                                              "see_stone", "see_item", "see_animal" };
+                                              "see_stone", "see_item", "see_animal", "give", "tired", "bored", "glad", "worried", "hug_count",
+                                              "item_get" };
 
 typedef std::vector<std::string> Lines;
 static Lines sLines[P_COUNT][L_KIND_COUNT];
+// Things that happen, for them to talk about later ("when" in companion_lines.json's banter)
+enum EventKind { EV_KO, EV_HUG, EV_SONG, EV_GIFT, EV_BOSS, EV_LOWHP, EV_STREAK, EV_TIRED, EV_COUNT };
+static const char* sEventKey[EV_COUNT] = { "ko", "hug", "song", "gift", "boss", "low_health", "streak", "tired" };
 struct Banter {
-    int a, b;
+    int a, b; // personas (in a talk about something that happened: -1 for anyone; b is the one it happened to)
     Lines lines;
+    int when = -1; // the kind of thing that happened (EventKind), -1: an ordinary chat
 };
 static std::vector<Banter> sBanter;
 static std::map<int, std::map<int, Lines>> sSceneLines; // scene -> persona -> lines
@@ -511,6 +523,19 @@ static void AddScene(int scene, int p, std::initializer_list<const char*> l) {
     for (const char* s : l) {
         sSceneLines[scene][p].push_back(s);
     }
+}
+
+// A talk about something that happened (a: who speaks first, b: the one it happened to; -1: anyone). {a} and {b}
+// are their names, {n} the count for b (knock-outs, hugs, songs, finds, monsters, bosses)
+static void AddReact(int when, int a, int b, std::initializer_list<const char*> l) {
+    Banter t;
+    t.a = a;
+    t.b = b;
+    t.when = when;
+    for (const char* s : l) {
+        t.lines.push_back(s);
+    }
+    sBanter.push_back(t);
 }
 
 static void AddBanter(int a, int b, std::initializer_list<const char*> l) {
@@ -944,6 +969,98 @@ static void BuildLines() {
     Add(P_ZELDA_Y, L_SEE_ANIMAL, { "Oh! Hello there!", "How sweet..." });
     Add(P_ZELDA_A, L_SEE_ANIMAL, { "Hello, little one.", "Even now, life goes on. That's something." });
 
+    Add(P_SARIA, L_GIVE, { "Here, Link! For you!", "Look what I found!", "Hee hee, finders keepers... no, it's yours!" });
+    Add(P_RUTO_Y, L_GIVE, { "Here. A gift from your princess. Be grateful!", "I found it, so you owe me!",
+                            "Take it! ...You're welcome." });
+    Add(P_RUTO_A, L_GIVE, { "Here. Don't say I never gave you anything.", "This was in there. Take it." });
+    Add(P_MALON_Y, L_GIVE, { "Fairy boy! Here, catch!", "I found it! It's for you!", "Here ya go!" });
+    Add(P_MALON_A, L_GIVE, { "Here you go, fairy boy.", "Found this for you.", "Don't spend it all at once!" });
+    Add(P_ZELDA_Y, L_GIVE, { "Here, Link. You should have this.", "This was inside. Please take it." });
+    Add(P_ZELDA_A, L_GIVE, { "Take this, Link.", "For you. You'll need it more than I will." });
+
+    // Moods
+    Add(P_SARIA, L_TIRED, { "*yawn* ...Sorry, Link. Out here the days are so long.", "Could we rest a little? My feet hurt..." });
+    Add(P_RUTO_Y, L_TIRED, { "Carry me. ...I'm joking. Mostly. My fins ache.", "*yawn* Princesses need their beauty sleep, you know!" });
+    Add(P_RUTO_A, L_TIRED, { "I could use a swim... or a nap.", "Let's slow down a little, Link." });
+    Add(P_MALON_Y, L_TIRED, { "*yaaawn* I'm usually in bed by now...", "My legs are sleepy..." });
+    Add(P_MALON_A, L_TIRED, { "Whew. Even ranch work isn't this tiring.", "Mind if we take five, fairy boy?" });
+    Add(P_ZELDA_Y, L_TIRED, { "I'm not used to walking so far... Impa always had a carriage.", "*yawn* Pardon me." });
+    Add(P_ZELDA_A, L_TIRED, { "I'm alright. Just... tired.", "A short rest would do us all good." });
+    Add(P_SARIA, L_BORED, { "Link! Let's go somewhere! Anywhere!", "Hmm hm hm... I'm counting leaves. Forty-two!" });
+    Add(P_RUTO_Y, L_BORED, { "Are we just going to STAND here?", "Hmph! I'm bored! Entertain me, Link!" });
+    Add(P_RUTO_A, L_BORED, { "Are we waiting for something?", "Standing still is not very heroic, Link." });
+    Add(P_MALON_Y, L_BORED, { "Fairy boy, let's go see something fun!", "I'm bored... wanna race?" });
+    Add(P_MALON_A, L_BORED, { "Penny for your thoughts? We've been standing here a while.", "Restless, huh? Me too." });
+    Add(P_ZELDA_Y, L_BORED, { "Shall we keep going, Link?", "I wonder what's over the next hill..." });
+    Add(P_ZELDA_A, L_BORED, { "We shouldn't linger too long, Link.", "Is something on your mind?" });
+    Add(P_SARIA, L_GLAD, { "Today's a good day, isn't it, Link?", "Hee hee! I'm so glad I came with you!" });
+    Add(P_RUTO_Y, L_GLAD, { "Hmph... this is actually fun. Don't tell anyone.", "I'm in a VERY good mood. Be grateful." });
+    Add(P_RUTO_A, L_GLAD, { "It feels good, being out here with you.", "I'm happy, Link. Truly." });
+    Add(P_MALON_Y, L_GLAD, { "La la la! I feel like singing!", "This is the best adventure EVER!" });
+    Add(P_MALON_A, L_GLAD, { "Ain't this nice? All of us together.", "I haven't smiled this much in years." });
+    Add(P_ZELDA_Y, L_GLAD, { "I feel so free out here!", "I'm glad I trusted you, Link." });
+    Add(P_ZELDA_A, L_GLAD, { "For the first time in years, I feel hopeful.", "Thank you, Link. For all of this." });
+    Add(P_SARIA, L_WORRIED, { "Link... please be careful.", "I don't like this. Stay close, okay?" });
+    Add(P_RUTO_Y, L_WORRIED, { "You're not going to get hurt again, are you?! I forbid it!", "I-I'm not scared! You're scared!" });
+    Add(P_RUTO_A, L_WORRIED, { "Watch yourself, Link.", "Something's wrong. I can feel it." });
+    Add(P_MALON_Y, L_WORRIED, { "Fairy boy, you look hurt...", "I don't like it here..." });
+    Add(P_MALON_A, L_WORRIED, { "You're pushing yourself too hard, Link.", "Careful. I'd like you in one piece." });
+    Add(P_ZELDA_Y, L_WORRIED, { "Link, you're hurt... please rest.", "I have a bad feeling about this." });
+    Add(P_ZELDA_A, L_WORRIED, { "Don't be reckless, Link.", "Stay alert. Ganondorf's influence is strong here." });
+
+    Add(P_SARIA, L_HUG_COUNT, { "That's %d hugs now! I've been counting, hee hee." });
+    Add(P_RUTO_Y, L_HUG_COUNT, { "%d hugs! That's practically a royal wedding vow." , "That's %d! I'm keeping score, you know." });
+    Add(P_RUTO_A, L_HUG_COUNT, { "That makes %d. Not that I'm counting." });
+    Add(P_MALON_Y, L_HUG_COUNT, { "That's %d hugs! You're as cuddly as a calf!" });
+    Add(P_MALON_A, L_HUG_COUNT, { "%d hugs. You're a real sweetheart, you know that?" });
+    Add(P_ZELDA_Y, L_HUG_COUNT, { "That's %d now. Impa would be shocked!" });
+    Add(P_ZELDA_A, L_HUG_COUNT, { "%d... thank you, Link. Truly." });
+
+    Add(P_SARIA, L_ITEM_GET, { "Ooh! What is it, Link? Let me see!", "Wow! That looks important!" });
+    Add(P_RUTO_Y, L_ITEM_GET, { "Is it for me? ...No? Hmph.", "Ooh, shiny! Can I hold it?" });
+    Add(P_RUTO_A, L_ITEM_GET, { "That should help us.", "Well, that's useful." });
+    Add(P_MALON_Y, L_ITEM_GET, { "Wow! What does it do?", "Ooh, fairy boy, you got something!" });
+    Add(P_MALON_A, L_ITEM_GET, { "Now that's a find!", "Look at you, collecting treasures." });
+    Add(P_ZELDA_Y, L_ITEM_GET, { "That's a fine treasure, Link.", "I've read about that in the royal library!" });
+    Add(P_ZELDA_A, L_ITEM_GET, { "That will serve you well.", "The goddesses are watching over you, Link." });
+
+    // Talking about what happened ({a}: who speaks, {b}: the one it happened to, {n}: how many times)
+    AddReact(EV_KO, -1, P_RUTO_Y, { "Ruto, are you okay? You went down hard back there.",
+                                    "I was RESTING. Princesses rest. It's a royal thing." });
+    AddReact(EV_KO, -1, P_SARIA, { "Saria, you got knocked over! Are you hurt?",
+                                   "I'm fine! Kokiri are tougher than we look." });
+    AddReact(EV_KO, -1, P_MALON_Y, { "Malon, you okay?", "Yeah! I've been kicked by cows harder than that!" });
+    AddReact(EV_KO, -1, P_MALON_A, { "{b}, you took a nasty hit.", "Takes more than that to keep a ranch girl down." });
+    AddReact(EV_KO, -1, P_ZELDA_Y, { "Princess, are you hurt?", "I'm fine. Impa would scold me for being careless, though." });
+    AddReact(EV_KO, -1, P_ZELDA_A, { "{b}, that looked painful.", "I've endured worse. Thank you for worrying." });
+    AddReact(EV_KO, -1, P_RUTO_A, { "{b}, are you all right?", "Hmph. A Sage doesn't stay down for long." });
+    AddReact(EV_KO, P_RUTO_Y, -1, { "Ha! {b} got knocked over!", "Hey! At least I got back up!", "...Fair." });
+    AddReact(EV_KO, -1, -1, { "{b}, that's {n} times you've been knocked out now...", "Don't remind me." });
+    AddReact(EV_HUG, P_RUTO_Y, -1, { "Excuse me, {b}. That's MY fiancé you were hugging.", "Ruto, it was just a hug!",
+                                     "...Hmph. Fine. Just a hug." });
+    AddReact(EV_HUG, -1, -1, { "You two looked so happy just now.", "Hee hee... Link gives really good hugs." });
+    AddReact(EV_HUG, P_MALON_Y, -1, { "Can we do a group hug next time?", "Sure! Everyone squish together!" });
+    AddReact(EV_SONG, -1, P_SARIA, { "Saria, where did you learn that song?", "The forest taught me! I just listened really hard." });
+    AddReact(EV_SONG, P_RUTO_Y, P_MALON_Y, { "Malon, could you teach me that song?",
+                                             "Sure! But you have to sing it to a horse first!", "...A HORSE?!" });
+    AddReact(EV_SONG, -1, P_MALON_A, { "{b}, your voice is lovely.", "Aw, shucks. Epona's my biggest fan, though." });
+    AddReact(EV_SONG, -1, P_ZELDA_Y, { "Princess, what was that melody?", "The royal family's lullaby. It's been passed down for ages." });
+    AddReact(EV_SONG, -1, P_ZELDA_A, { "That lullaby... it was beautiful, {b}.", "Impa used to sing it for me. I'm glad it lives on." });
+    AddReact(EV_SONG, P_SARIA, -1, { "{b}, you should perform more often!", "Only if you play along with me next time, Saria!" });
+    AddReact(EV_GIFT, -1, -1, { "{b}, did you find something again?", "Yep! That's {n} things I've found for Link so far!" });
+    AddReact(EV_GIFT, P_RUTO_Y, -1, { "Hmph, {b} is trying to outdo me. I'll find something even shinier!",
+                                      "It's not a contest, Ruto!", "Everything's a contest!" });
+    AddReact(EV_BOSS, -1, -1, { "We actually did it... we beat it!", "Link did most of it. But we helped!" });
+    AddReact(EV_BOSS, P_RUTO_Y, -1, { "Did you see that? I was magnificent.", "You hid behind Link the whole time, Ruto.",
+                                      "STRATEGICALLY." });
+    AddReact(EV_BOSS, -1, -1, { "That's {n} big monsters we've beaten together now.", "And we'll beat the next one too!" });
+    AddReact(EV_LOWHP, -1, -1, { "Link almost... that was too close.", "We have to watch his back better." });
+    AddReact(EV_LOWHP, P_SARIA, -1, { "Link, please be more careful...", "We'll protect you, Link. All of us." });
+    AddReact(EV_STREAK, -1, -1, { "{b}, you were amazing in that fight!", "Hee hee! That's {n} monsters I've beaten now!" });
+    AddReact(EV_STREAK, P_RUTO_Y, -1, { "Show-off.", "Says the princess who splashed water at a Deku Baba!" });
+    AddReact(EV_TIRED, -1, -1, { "{b}, you look sleepy.", "*yawn* ...Maybe we could rest a little?" });
+    AddReact(EV_TIRED, P_MALON_Y, -1, { "{b}, you're yawning!", "Am not! ...*yaaawn*" });
+
     // Places
     AddScene(SCENE_KOKIRI_FOREST, P_SARIA, { "Home... it looks smaller now, doesn't it?" });
     AddScene(SCENE_KOKIRI_FOREST, P_RUTO_Y, { "So THIS is where you grew up? Everything's so tiny!" });
@@ -1063,6 +1180,12 @@ static void LoadExtraLines() {
             for (auto& b : j["banter"]) {
                 Banter t;
                 t.a = t.b = -1;
+                std::string when = b.value("when", "");
+                for (int e = 0; e < EV_COUNT; e++) {
+                    if (when == sEventKey[e]) {
+                        t.when = e;
+                    }
+                }
                 for (int p = 0; p < P_COUNT; p++) {
                     if (b.value("a", "") == sPersonaKey[p]) {
                         t.a = p;
@@ -1071,7 +1194,7 @@ static void LoadExtraLines() {
                         t.b = p;
                     }
                 }
-                if ((t.a < 0) || (t.b < 0) || !b.contains("lines") || !b["lines"].is_array()) {
+                if (((t.when < 0) && ((t.a < 0) || (t.b < 0))) || !b.contains("lines") || !b["lines"].is_array()) {
                     continue;
                 }
                 for (auto& s : b["lines"]) {
@@ -1167,6 +1290,10 @@ typedef struct {
     u8 explorePhase; // 0 going there, 1 looking
     s16 exploreTimer, exploreStall, exploreCd;
     f32 exploreBest;
+    Vec3f poiPos;      // where the pot she broke stood
+    Actor* carry;      // a drop she's bringing to Link
+    f32 carryGravity;  // (its own, given back when she puts it down)
+    u8 fetches;        // drops brought from this pot
 } Comp;
 
 static s16 sHugWho = -1;
@@ -1176,6 +1303,28 @@ static CompModel* FindModel(int persona);
 static s16 sCompActorId = -1;
 static s16 sCuccoActorId = -1;
 static Comp* sComp[COMP_COUNT] = {};
+
+// ---- Memory and moods ----
+// What they remember (kept per save file in companion_memory.json): how many hugs, songs, knock-outs, monsters,
+// finds and bosses each girl has had with Link, and what's happened lately (for them to talk about). Each girl has
+// moods too: cheer, energy, boredom and worry, which change with what happens and change what she does and says.
+struct Mood {
+    f32 cheer = 0.6f, energy = 1.0f, boredom = 0.0f, worry = 0.0f;
+    bool tiredSaid = false;
+};
+static Mood sMood[COMP_COUNT];
+enum MemCount { M_HUGS, M_SONGS, M_KOS, M_KILLS, M_GIFTS, M_BOSSES, M_COUNT };
+static const char* sMemKey[M_COUNT] = { "hugs", "songs", "kos", "kills", "gifts", "bosses" };
+static s32 sMem[COMP_COUNT][M_COUNT];
+struct MemEvent {
+    int ev;
+    int who; // the girl it happened to (-1: everyone)
+    u32 clock;
+    bool used;
+};
+static std::deque<MemEvent> sEvents;
+static u32 sClock = 0;
+static void Remember(int ev, int who);
 
 // Bubbles: what each one is saying now, and lines waiting their turn (banter)
 struct Bubble {
@@ -2023,6 +2172,7 @@ static int PoiKindOf(PlayState* play, Actor* a) {
             return POI_SIGN;
         case ACTOR_OBJ_TSUBO:
         case ACTOR_OBJ_KIBAKO:
+        case ACTOR_EN_KUSA:
         case ACTOR_OBJ_KIBAKO2:
             return POI_POT;
         case ACTOR_EN_SW:
@@ -2105,6 +2255,10 @@ static bool StartExplore(PlayState* play, Comp* c, Player* player) {
                 continue;
             }
             f32 score = sPoiInterest[c->persona][kind] * (0.6f + 0.4f * Rand_ZeroOne()) / (1.0f + fromHer / 250.0f);
+            // (grass is everywhere: only now and then; Saria likes it more)
+            if (a->id == ACTOR_EN_KUSA) {
+                score *= (c->persona == P_SARIA) ? 0.6f : 0.3f;
+            }
             // (a heart when he's hurt: worth pointing out)
             if ((kind == POI_ITEM) && (gSaveContext.health <= gSaveContext.healthCapacity / 2)) {
                 score *= 2.0f;
@@ -2136,7 +2290,14 @@ static bool StartExplore(PlayState* play, Comp* c, Player* player) {
     return true;
 }
 
+static void DropCarry(PlayState* play, Comp* c, const Vec3f* at);
+
 static void EndExplore(Comp* c) {
+    if (c->carry != nullptr) {
+        DropCarry(gPlayState, c, nullptr); // (set down where she is)
+    }
+    c->hit.dim.radius = 55;
+    c->fetches = 0;
     c->state = ST_FOLLOW;
     c->poi = nullptr;
     c->eyeOverride = -1;
@@ -2146,69 +2307,321 @@ static void EndExplore(Comp* c) {
                          COMP_FPS);
 }
 
+// A drop she can carry over to him: rupees, hearts, ammo, magic (not keys, Heart Pieces or a randomizer's items)
+static bool Carryable(Actor* a) {
+    if ((a == nullptr) || (a->id != ACTOR_EN_ITEM00) || (a->parent != nullptr) || (a->update == nullptr)) {
+        return false;
+    }
+    switch (a->params & 0xFF) {
+        case ITEM00_RUPEE_GREEN:
+        case ITEM00_RUPEE_BLUE:
+        case ITEM00_RUPEE_RED:
+        case ITEM00_RUPEE_ORANGE:
+        case ITEM00_RUPEE_PURPLE:
+        case ITEM00_HEART:
+        case ITEM00_BOMBS_A:
+        case ITEM00_BOMBS_B:
+        case ITEM00_ARROWS_SINGLE:
+        case ITEM00_ARROWS_SMALL:
+        case ITEM00_ARROWS_MEDIUM:
+        case ITEM00_ARROWS_LARGE:
+        case ITEM00_NUTS:
+        case ITEM00_STICK:
+        case ITEM00_MAGIC_LARGE:
+        case ITEM00_MAGIC_SMALL:
+        case ITEM00_SEEDS:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool Breakable(Actor* a) {
+    return (a != nullptr) && ((a->id == ACTOR_OBJ_TSUBO) || (a->id == ACTOR_OBJ_KIBAKO) || (a->id == ACTOR_EN_KUSA));
+}
+
+static bool CarriedByAnyone(Actor* a) {
+    for (int i = 0; i < COMP_COUNT; i++) {
+        if ((sComp[i] != nullptr) && (sComp[i]->carry == a)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Put down what she carries (at a spot: his feet, so he picks it up)
+static void DropCarry(PlayState* play, Comp* c, const Vec3f* at) {
+    Actor* a = c->carry;
+    c->carry = nullptr;
+    if ((a == nullptr) || !PoiExists(play, a)) {
+        return;
+    }
+    if (at != nullptr) {
+        a->world.pos = *at;
+    }
+    a->gravity = c->carryGravity;
+    a->velocity.y = 0.0f;
+    a->speedXZ = 0.0f;
+}
+
+// Carried: held up in front of her
+static void HoldCarry(PlayState* play, Comp* c) {
+    Actor* a = c->carry;
+    if (a == nullptr) {
+        return;
+    }
+    if (!PoiExists(play, a) || (a->parent != nullptr)) {
+        c->carry = nullptr; // (picked up already, or gone)
+        return;
+    }
+    a->world.pos = c->actor.world.pos;
+    a->world.pos.x += Math_SinS(c->actor.shape.rot.y) * 12.0f;
+    a->world.pos.z += Math_CosS(c->actor.shape.rot.y) * 12.0f;
+    a->world.pos.y += Def(c).height * c->actor.scale.y * 0.55f;
+    a->gravity = 0.0f;
+    a->velocity.y = 0.0f;
+    a->speedXZ = 0.0f;
+    // (the drop's own countdown to vanishing, held off while she carries it)
+    EnItem00* item = (EnItem00*)a;
+    if ((item->unk_15A > 0) && (item->unk_15A < 120)) {
+        item->unk_15A = 120;
+    }
+}
+
+static void EndExplore(Comp* c);
+
+// The nearest drop she can carry around a spot (what a pot just let out)
+static Actor* FindDrop(PlayState* play, Comp* c, Vec3f* around, f32 radius) {
+    Actor* best = nullptr;
+    f32 bestD = radius;
+    for (Actor* a = play->actorCtx.actorLists[ACTORCAT_MISC].head; a != nullptr; a = a->next) {
+        if (!Carryable(a) || CarriedByAnyone(a) || (fabsf(a->world.pos.y - c->actor.world.pos.y) > 50.0f)) {
+            continue;
+        }
+        f32 d = Math_Vec3f_DistXZ(&a->world.pos, around);
+        if (d < bestD) {
+            bestD = d;
+            best = a;
+        }
+    }
+    return best;
+}
+
+// Walk toward a point (the ground permitting); true once there or stuck
+static bool WalkTo(PlayState* play, Comp* c, Vec3f* goal, f32 stop, f32 speed) {
+    const PersonaDef& d = Def(c);
+    f32 dist = Math_Vec3f_DistXZ(&c->actor.world.pos, goal);
+    if (dist < stop) {
+        c->actor.speedXZ = 0.0f;
+        return true;
+    }
+    if (dist < c->exploreBest - 2.0f) {
+        c->exploreBest = dist;
+        c->exploreStall = 0;
+    } else if (++c->exploreStall > 25) {
+        c->actor.speedXZ = 0.0f;
+        return true; // (a wall, something in the way)
+    }
+    s16 yaw = Math_Vec3f_Yaw(&c->actor.world.pos, goal);
+    // (the ground falls away ahead, or deep water: she stops at the edge)
+    Vec3f ahead = c->actor.world.pos;
+    ahead.x += Math_SinS(yaw) * 25.0f;
+    ahead.z += Math_CosS(yaw) * 25.0f;
+    ahead.y += 40.0f;
+    CollisionPoly* poly;
+    s32 bgId;
+    f32 floorY = BgCheck_EntityRaycastFloor3(&play->colCtx, &poly, &bgId, &ahead);
+    f32 waterY;
+    WaterBox* wb;
+    if ((floorY <= BGCHECK_Y_MIN) || (floorY < c->actor.world.pos.y - 40.0f) ||
+        ((d.swim == nullptr) && WaterBox_GetSurface1(play, &play->colCtx, ahead.x, ahead.z, &waterY, &wb) &&
+         (waterY > floorY + 15.0f))) {
+        c->actor.speedXZ = 0.0f;
+        return true;
+    }
+    c->actor.world.rot.y = yaw;
+    Math_SmoothStepToS(&c->actor.shape.rot.y, yaw, 3, 0x1000, 0x100);
+    Math_ApproachF(&c->actor.speedXZ, speed, 0.5f, 0.6f);
+    bool mixWalk = MixamoOn() && (c->rigState == 1) && (c->rig.lThigh != 0);
+    if ((d.move != nullptr) && !mixWalk && !(c->linkWalk && CVarGetInteger(COMP_CVAR("LinkWalk"), 1))) {
+        SetAnim(c, d.move, std::max(0.6f, c->actor.speedXZ * d.moveAnimSpeed), ANIMMODE_LOOP, -5.0f);
+    } else {
+        SetAnim(c, d.idle, 1.0f, ANIMMODE_LOOP, -6.0f);
+    }
+    return false;
+}
+
+enum ExplorePhase { EX_GO, EX_LOOK, EX_BREAK, EX_WAIT_DROP, EX_GO_DROP, EX_BRING };
+
 static void UpdateExplore(PlayState* play, Comp* c, Player* player) {
     const PersonaDef& d = Def(c);
     c->exploreTimer++;
-    // Link heading off, an enemy, the thing gone, or taking too long: back to him
-    if (!PoiExists(play, c->poi) || (Actor_WorldDistXZToActor(&c->actor, &player->actor) > Leash(c) * 1.4f) ||
-        (c->exploreTimer > (s16)(Tune("explore_max_seconds", 9.0f) * COMP_FPS))) {
+    f32 walk = Tune("walk_speed", 2.5f) * Tune("explore_speed", 1.0f);
+    // An enemy, or Link heading off (with something in her hands she runs after him), or taking too long
+    f32 toLink = Actor_WorldDistXZToActor(&c->actor, &player->actor);
+    bool tooFar = (c->explorePhase == EX_BRING) ? (toLink > Leash(c) * 3.0f) : (toLink > Leash(c) * 1.4f);
+    if (tooFar || (c->exploreTimer > (s16)(Tune("explore_max_seconds", 9.0f) * COMP_FPS)) ||
+        (((c->exploreTimer % 10) == 0) && (FindTarget(play, c) != nullptr))) {
         EndExplore(c);
         return;
     }
-    if (((c->exploreTimer % 10) == 0) && (FindTarget(play, c) != nullptr)) {
-        EndExplore(c);
-        return;
-    }
-    Actor* a = c->poi;
-    f32 dist = Actor_WorldDistXZToActor(&c->actor, a);
-    if (c->explorePhase == 0) {
-        // Over to it
-        bool arrived = dist < sPoiStop[c->poiKind];
-        // (not getting any closer: a wall, something in the way)
-        if (dist < c->exploreBest - 2.0f) {
-            c->exploreBest = dist;
-            c->exploreStall = 0;
-        } else if (++c->exploreStall > 25) {
-            arrived = true;
-        }
-        // (the ground falls away ahead, or deep water: she stops at the edge)
-        s16 yaw = Math_Vec3f_Yaw(&c->actor.world.pos, &a->world.pos);
-        Vec3f ahead = c->actor.world.pos;
-        ahead.x += Math_SinS(yaw) * 25.0f;
-        ahead.z += Math_CosS(yaw) * 25.0f;
-        ahead.y += 40.0f;
-        CollisionPoly* poly;
-        s32 bgId;
-        f32 floorY = BgCheck_EntityRaycastFloor3(&play->colCtx, &poly, &bgId, &ahead);
-        f32 waterY;
-        WaterBox* wb;
-        if ((floorY <= BGCHECK_Y_MIN) || (floorY < c->actor.world.pos.y - 40.0f) ||
-            ((d.swim == nullptr) && WaterBox_GetSurface1(play, &play->colCtx, ahead.x, ahead.z, &waterY, &wb) &&
-             (waterY > floorY + 15.0f))) {
-            arrived = true;
-        }
-        if (arrived) {
-            c->explorePhase = 1;
+    // (the pot is gone once broken; before that, gone means someone else got there)
+    if ((c->explorePhase <= EX_BREAK) && !PoiExists(play, c->poi)) {
+        if (c->explorePhase == EX_BREAK) {
+            c->explorePhase = EX_WAIT_DROP;
             c->exploreTimer = 0;
-            c->actor.speedXZ = 0.0f;
         } else {
-            c->actor.world.rot.y = yaw;
-            Math_SmoothStepToS(&c->actor.shape.rot.y, yaw, 3, 0x1000, 0x100);
-            Math_ApproachF(&c->actor.speedXZ, Tune("walk_speed", 2.5f) * Tune("explore_speed", 1.0f), 0.5f, 0.6f);
-            bool mixWalk = MixamoOn() && (c->rigState == 1) && (c->rig.lThigh != 0);
-            if ((d.move != nullptr) && !mixWalk && !(c->linkWalk && CVarGetInteger(COMP_CVAR("LinkWalk"), 1))) {
-                SetAnim(c, d.move, std::max(0.6f, c->actor.speedXZ * d.moveAnimSpeed), ANIMMODE_LOOP, -5.0f);
-            } else {
-                SetAnim(c, d.idle, 1.0f, ANIMMODE_LOOP, -6.0f);
-            }
+            EndExplore(c);
             return;
         }
     }
+    Actor* a = c->poi;
+    switch (c->explorePhase) {
+        case EX_GO: {
+            // Over to it (right up to a pot she means to break, or a drop she means to pick up)
+            bool breaks = Breakable(a) && (Tune("explore_break", 1.0f) != 0.0f);
+            bool fetches = (c->poiKind == POI_ITEM) && Carryable(a) && (Tune("explore_fetch", 1.0f) != 0.0f);
+            f32 stop = breaks ? Tune("break_distance", 26.0f) : fetches ? 14.0f : sPoiStop[c->poiKind];
+            if (WalkTo(play, c, &a->world.pos, stop, walk)) {
+                c->exploreTimer = 0;
+                c->exploreBest = 1e9f;
+                c->exploreStall = 0;
+                f32 there = Actor_WorldDistXZToActor(&c->actor, a);
+                if (fetches && (there < 30.0f) && !CarriedByAnyone(a)) {
+                    // Picked up: off to Link with it
+                    c->carry = a;
+                    c->carryGravity = a->gravity;
+                    c->explorePhase = EX_BRING;
+                    Audio_PlayActorSound2(&c->actor, NA_SE_PL_PULL_UP_PLANT);
+                } else if (breaks && (there < stop + 12.0f)) {
+                    c->explorePhase = EX_BREAK;
+                    c->poiPos = a->world.pos;
+                } else {
+                    c->explorePhase = EX_LOOK;
+                }
+            }
+            return;
+        }
+        case EX_BREAK: {
+            // A swing (her melee move), small enough to hit just this one
+            c->actor.speedXZ = 0.0f;
+            s16 yaw = Math_Vec3f_Yaw(&c->actor.world.pos, &c->poiPos);
+            Math_SmoothStepToS(&c->actor.shape.rot.y, yaw, 2, 0x2000, 0x200);
+            c->actor.world.rot.y = c->actor.shape.rot.y;
+            if (c->exploreTimer == 1) {
+                SetAnim(c, (d.melee != nullptr) ? d.melee : d.happy, 1.4f, ANIMMODE_ONCE, -3.0f);
+                if (Rand_ZeroOne() < sPoiSay[POI_POT]) {
+                    SayKind(c->who, L_SEE_POT);
+                }
+            }
+            if (c->exploreTimer == 7) {
+                Voice(&c->actor, d.voiceAttack);
+                c->hit.dim.radius = (s16)Tune("break_radius", 20.0f);
+                c->hit.info.toucher.dmgFlags = c->adult ? DMG_SLASH_MASTER : DMG_SLASH_KOKIRI;
+                c->hitActive = 4;
+            }
+            if (c->exploreTimer > 20) {
+                // (still standing: it wasn't one she could break)
+                c->explorePhase = EX_LOOK;
+                c->exploreTimer = 6;
+            }
+            return;
+        }
+        case EX_WAIT_DROP: {
+            // Whatever was inside: the nearest thing she can carry
+            c->actor.speedXZ = 0.0f;
+            if (c->exploreTimer == 6) {
+                c->hit.dim.radius = 55;
+            }
+            if (c->exploreTimer < 18) {
+                return;
+            }
+            Actor* drop = (Tune("explore_fetch", 1.0f) != 0.0f) ? FindDrop(play, c, &c->poiPos, 110.0f) : nullptr;
+            if ((drop == nullptr) || (c->fetches >= 3)) {
+                if (c->exploreTimer > 40) {
+                    EndExplore(c);
+                }
+                return;
+            }
+            c->poi = drop;
+            MarkPoiSeen(drop);
+            c->explorePhase = EX_GO_DROP;
+            c->exploreTimer = 0;
+            c->exploreBest = 1e9f;
+            c->exploreStall = 0;
+            return;
+        }
+        case EX_GO_DROP: {
+            if (!PoiExists(play, a) || CarriedByAnyone(a) || !Carryable(a)) {
+                c->explorePhase = EX_WAIT_DROP;
+                c->exploreTimer = 18;
+                return;
+            }
+            if (WalkTo(play, c, &a->world.pos, 14.0f, walk)) {
+                if (Actor_WorldDistXZToActor(&c->actor, a) < 30.0f) {
+                    c->carry = a;
+                    c->carryGravity = a->gravity;
+                    c->explorePhase = EX_BRING;
+                    c->exploreTimer = 0;
+                    c->exploreBest = 1e9f;
+                    c->exploreStall = 0;
+                    Audio_PlayActorSound2(&c->actor, NA_SE_PL_PULL_UP_PLANT);
+                } else {
+                    c->explorePhase = EX_WAIT_DROP;
+                    c->exploreTimer = 18;
+                    MarkPoiSeen(a);
+                }
+            }
+            return;
+        }
+        case EX_BRING: {
+            // To Link, and put it down at his feet (he picks it up)
+            HoldCarry(play, c);
+            if (c->carry == nullptr) {
+                EndExplore(c);
+                return;
+            }
+            f32 speed = std::max(walk * 1.4f, std::min(player->actor.speedXZ * 1.1f, Tune("run_speed", 6.0f)));
+            Vec3f goal = player->actor.world.pos;
+            bool there = WalkTo(play, c, &goal, Tune("give_distance", 32.0f), speed);
+            if (there && (toLink < 45.0f)) {
+                Vec3f feet = player->actor.world.pos;
+                feet.y += 2.0f;
+                DropCarry(play, c, &feet);
+                if (Rand_ZeroOne() < Tune("give_talk", 0.6f)) {
+                    SayKind(c->who, L_GIVE);
+                }
+                Voice(&c->actor, d.voiceHappy);
+                Remember(EV_GIFT, c->who);
+                c->fetches++;
+                // More where that came from? (a crate's worth)
+                if ((c->fetches < 3) && (FindDrop(play, c, &c->poiPos, 110.0f) != nullptr)) {
+                    c->explorePhase = EX_WAIT_DROP;
+                    c->exploreTimer = 18;
+                } else {
+                    EndExplore(c);
+                }
+            } else if (there) {
+                // (couldn't get closer: she sets it down here)
+                c->exploreStall = 0;
+                c->exploreBest = 1e9f;
+                if (c->exploreTimer > 60) {
+                    DropCarry(play, c, nullptr);
+                    EndExplore(c);
+                }
+            }
+            return;
+        }
+        default:
+            break;
+    }
     // Looking at it, and saying something
     c->actor.speedXZ = 0.0f;
-    s16 yaw = Math_Vec3f_Yaw(&c->actor.world.pos, &a->world.pos);
-    Math_SmoothStepToS(&c->actor.shape.rot.y, yaw, 3, 0x1000, 0x100);
-    c->actor.world.rot.y = c->actor.shape.rot.y;
+    if (PoiExists(play, a)) {
+        s16 yaw = Math_Vec3f_Yaw(&c->actor.world.pos, &a->world.pos);
+        Math_SmoothStepToS(&c->actor.shape.rot.y, yaw, 3, 0x1000, 0x100);
+        c->actor.world.rot.y = c->actor.shape.rot.y;
+    }
     if (c->exploreTimer == 6) {
         if (Rand_ZeroOne() < sPoiSay[c->poiKind] * Tune("explore_talk", 1.0f)) {
             SayKind(c->who, sPoiLine[c->poiKind]);
@@ -2324,7 +2737,8 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
             }
         } else if (--c->wanderTimer <= 0) {
             // Now and then something catches her eye, or a little walk
-            if ((Rand_ZeroOne() < Tune("explore_chance", 0.6f)) && StartExplore(play, c, player)) {
+            if ((Rand_ZeroOne() < Tune("explore_chance", 0.6f) * (0.5f + sMood[c->who].boredom)) &&
+                StartExplore(play, c, player)) {
                 return;
             }
             if ((Rand_ZeroOne() < Tune("wander_chance", 0.6f)) && PickWanderSpot(play, c, player)) {
@@ -2469,6 +2883,7 @@ static void StartHug(PlayState* play, Comp* c, Player* player) {
     Sfx_PlaySfxCentered(NA_SE_EV_FAIRY_DASH);
     gSaveContext.healthAccumulator = (s16)(gSaveContext.healthAccumulator + (s16)Tune("hug_heal_quarters", 4.0f) * 4);
     SayKind(c->who, L_HUG);
+    Remember(EV_HUG, c->who);
 
     // Someone else sees it
     for (int i = 0; i < COMP_COUNT; i++) {
@@ -2625,6 +3040,7 @@ static void EndSong(PlayState* play, bool finished) {
     }
     if (finished && (sComp[performer] != nullptr)) {
         SayKind(performer, L_SONG_END);
+        Remember(EV_SONG, performer);
     }
 }
 
@@ -2849,6 +3265,10 @@ static void UpdateFace(Comp* c) {
             c->eye = 0;
             c->blinkTimer = Rand_S16Offset(30, 60);
         }
+    }
+    // (tired: her eyes droop)
+    if ((c->eye == 0) && (sMood[c->who].energy < Tune("tired_below", 0.3f))) {
+        c->eye = 1;
     }
     if (c->mouthTimer > 0) {
         c->mouthTimer--;
@@ -3276,6 +3696,14 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
     if (c->exploreCd > 0) {
         c->exploreCd--;
     }
+    // (out of exploring some other way, a hit, a song: what she carried is set down, her swing back to size)
+    if (c->state != ST_EXPLORE) {
+        if (c->carry != nullptr) {
+            DropCarry(play, c, nullptr);
+        }
+        c->hit.dim.radius = 55;
+        c->fetches = 0;
+    }
     SkelAnime_Update(&c->skel);
     if (c->model != nullptr) {
         // Her model moves with Link's own animations: standing, walking, running
@@ -3311,6 +3739,7 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
             c->actor.speedXZ = -4.0f;
             if (c->hp <= 0) {
                 c->state = ST_KO;
+                Remember(EV_KO, c->who);
                 c->timer = (s16)(Tune("ko_seconds", 10.0f) * COMP_FPS);
                 SayKind(c->who, L_KO);
             } else {
@@ -3844,6 +4273,9 @@ static bool CanBeHere(PlayState* play) {
 static void StartBanter() {
     std::vector<const Banter*> fits;
     for (auto& b : sBanter) {
+        if (b.when >= 0) {
+            continue; // (those are for talking about something that happened)
+        }
         int wa = -1, wb = -1;
         for (int i = 0; i < COMP_COUNT; i++) {
             if ((sComp[i] != nullptr) && !sComp[i]->hidden && (sComp[i]->state != ST_KO)) {
@@ -3876,6 +4308,383 @@ static void StartBanter() {
     }
 }
 
+
+// ---- Memory and moods: the workings ----
+
+static int sMemSlot = -1;
+static bool sMemDirty = false;
+
+static std::string MemPath() {
+    return Ship::Context::GetPathRelativeToAppDirectory("companion_memory.json");
+}
+
+static void SaveMemory() {
+    if ((sMemSlot < 0) || !sMemDirty) {
+        return;
+    }
+    sMemDirty = false;
+    nlohmann::json j = nlohmann::json::object();
+    {
+        std::ifstream in(MemPath(), std::ios::binary);
+        if (in) {
+            std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            j = nlohmann::json::parse(text, nullptr, false, true);
+            if (!j.is_object()) {
+                j = nlohmann::json::object();
+            }
+        }
+    }
+    nlohmann::json slot = nlohmann::json::object();
+    for (int w = 0; w < COMP_COUNT; w++) {
+        nlohmann::json g = nlohmann::json::object();
+        for (int k = 0; k < M_COUNT; k++) {
+            g[sMemKey[k]] = sMem[w][k];
+        }
+        g["mood"] = { { "cheer", sMood[w].cheer },
+                      { "energy", sMood[w].energy },
+                      { "boredom", sMood[w].boredom },
+                      { "worry", sMood[w].worry } };
+        slot[sWhoKey[w]] = g;
+    }
+    j["slot" + std::to_string(sMemSlot + 1)] = slot;
+    std::ofstream out(MemPath(), std::ios::binary);
+    out << j.dump(2);
+}
+
+// (when the save file changes: its memories)
+static void LoadMemory() {
+    int slot = (int)gSaveContext.fileNum;
+    if (slot == sMemSlot) {
+        return;
+    }
+    SaveMemory();
+    sMemSlot = slot;
+    sEvents.clear();
+    for (int w = 0; w < COMP_COUNT; w++) {
+        sMood[w] = Mood();
+        for (int k = 0; k < M_COUNT; k++) {
+            sMem[w][k] = 0;
+        }
+    }
+    std::ifstream in(MemPath(), std::ios::binary);
+    if (!in) {
+        return;
+    }
+    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    nlohmann::json j = nlohmann::json::parse(text, nullptr, false, true);
+    std::string key = "slot" + std::to_string(slot + 1);
+    if (!j.is_object() || !j.contains(key) || !j[key].is_object()) {
+        return;
+    }
+    for (int w = 0; w < COMP_COUNT; w++) {
+        if (!j[key].contains(sWhoKey[w])) {
+            continue;
+        }
+        auto& g = j[key][sWhoKey[w]];
+        for (int k = 0; k < M_COUNT; k++) {
+            sMem[w][k] = g.value(sMemKey[k], 0);
+        }
+        if (g.contains("mood") && g["mood"].is_object()) {
+            sMood[w].cheer = g["mood"].value("cheer", 0.6f);
+            sMood[w].energy = g["mood"].value("energy", 1.0f);
+            sMood[w].boredom = g["mood"].value("boredom", 0.0f);
+            sMood[w].worry = g["mood"].value("worry", 0.0f);
+        }
+    }
+}
+
+static void Nudge(f32* v, f32 by) {
+    *v = CLAMP(*v + by, 0.0f, 1.0f);
+}
+
+static bool ReactiveFits(const MemEvent& e);
+
+static void Remember(int ev, int who) {
+    if (gPlayState == nullptr) {
+        return;
+    }
+    LoadMemory();
+    sEvents.push_back({ ev, who, sClock, false });
+    while (sEvents.size() > 16) {
+        sEvents.pop_front();
+    }
+    int count = -1;
+    switch (ev) {
+        case EV_KO:
+            count = M_KOS;
+            Nudge(&sMood[who].cheer, -0.2f);
+            for (int i = 0; i < COMP_COUNT; i++) {
+                if (i != who) {
+                    Nudge(&sMood[i].worry, 0.2f);
+                }
+            }
+            break;
+        case EV_HUG:
+            count = M_HUGS;
+            Nudge(&sMood[who].cheer, 0.3f);
+            Nudge(&sMood[who].worry, -0.2f);
+            break;
+        case EV_SONG:
+            count = M_SONGS;
+            for (int i = 0; i < COMP_COUNT; i++) {
+                Nudge(&sMood[i].cheer, 0.15f);
+                Nudge(&sMood[i].boredom, -0.5f);
+            }
+            break;
+        case EV_GIFT:
+            count = M_GIFTS;
+            Nudge(&sMood[who].cheer, 0.1f);
+            break;
+        case EV_BOSS:
+            for (int i = 0; i < COMP_COUNT; i++) {
+                if (sComp[i] != nullptr) {
+                    sMem[i][M_BOSSES]++;
+                }
+                Nudge(&sMood[i].cheer, 0.35f);
+                sMood[i].worry = 0.0f;
+            }
+            break;
+        case EV_LOWHP:
+            for (int i = 0; i < COMP_COUNT; i++) {
+                Nudge(&sMood[i].worry, 0.3f);
+            }
+            break;
+        case EV_STREAK:
+            Nudge(&sMood[who].cheer, 0.15f);
+            break;
+        default:
+            break;
+    }
+    if ((count >= 0) && (who >= 0)) {
+        sMem[who][count]++;
+        // (a round number of hugs: she notices)
+        if ((count == M_HUGS) && (sMem[who][count] % 5 == 0)) {
+            Comp* c = sComp[who];
+            if (c != nullptr) {
+                std::string line = Format(Pick(sLines[c->persona][L_HUG_COUNT]), nullptr, sMem[who][count]);
+                if (!line.empty()) {
+                    sPending.push_back({ who, line, (s32)(2.5f * COMP_FPS) });
+                }
+            }
+        }
+    }
+    sMemDirty = true;
+    // Someone will want to talk about it soon (if there's something to say about it)
+    if (ReactiveFits(sEvents.back()) && (Rand_ZeroOne() < Tune("react_chance", 0.7f))) {
+        s32 soon = (s32)((Tune("react_min_seconds", 5.0f) + Rand_ZeroOne() * 6.0f) * COMP_FPS);
+        sChatTimer = std::min(sChatTimer, soon);
+    }
+}
+
+static std::string Fill(std::string s, const std::string& a, const std::string& b, int n) {
+    const std::string keys[3] = { "{a}", "{b}", "{n}" };
+    const std::string vals[3] = { a, b, std::to_string(n) };
+    for (int k = 0; k < 3; k++) {
+        size_t at;
+        while ((at = s.find(keys[k])) != std::string::npos) {
+            s.replace(at, keys[k].size(), vals[k]);
+        }
+    }
+    return s;
+}
+
+static bool Present(int w) {
+    return (w >= 0) && (w < COMP_COUNT) && (sComp[w] != nullptr) && !sComp[w]->hidden && (sComp[w]->state != ST_KO);
+}
+
+// For an event: a talk about it, and who says what (speaker a, subject b)
+static bool PickReactive(const MemEvent& e, const Banter** outB, int* outA, int* outSub) {
+    std::vector<std::pair<const Banter*, std::pair<int, int>>> fits;
+    for (auto& b : sBanter) {
+        if (b.when != e.ev) {
+            continue;
+        }
+        // The subject: the girl it happened to (or, for an event that happened to all, whoever's named / anyone)
+        int sub = -1;
+        if (e.who >= 0) {
+            if (!Present(e.who) || ((b.b >= 0) && (sComp[e.who]->persona != b.b))) {
+                continue;
+            }
+            sub = e.who;
+        } else {
+            std::vector<int> can;
+            for (int i = 0; i < COMP_COUNT; i++) {
+                if (Present(i) && ((b.b < 0) || (sComp[i]->persona == b.b))) {
+                    can.push_back(i);
+                }
+            }
+            if (can.empty()) {
+                continue;
+            }
+            sub = can[(size_t)(Rand_ZeroOne() * (f32)can.size()) % can.size()];
+        }
+        // The speaker: someone else
+        std::vector<int> can;
+        for (int i = 0; i < COMP_COUNT; i++) {
+            if ((i != sub) && Present(i) && ((b.a < 0) || (sComp[i]->persona == b.a))) {
+                can.push_back(i);
+            }
+        }
+        if (can.empty()) {
+            continue;
+        }
+        int a = can[(size_t)(Rand_ZeroOne() * (f32)can.size()) % can.size()];
+        fits.push_back({ &b, { a, sub } });
+    }
+    if (fits.empty()) {
+        return false;
+    }
+    auto& f = fits[(size_t)(Rand_ZeroOne() * (f32)fits.size()) % fits.size()];
+    *outB = f.first;
+    *outA = f.second.first;
+    *outSub = f.second.second;
+    return true;
+}
+
+static bool ReactiveFits(const MemEvent& e) {
+    const Banter* b;
+    int a, sub;
+    return PickReactive(e, &b, &a, &sub);
+}
+
+static int EventCount(const MemEvent& e, int sub) {
+    switch (e.ev) {
+        case EV_KO:
+            return sMem[sub][M_KOS];
+        case EV_HUG:
+            return sMem[sub][M_HUGS];
+        case EV_SONG:
+            return sMem[sub][M_SONGS];
+        case EV_GIFT:
+            return sMem[sub][M_GIFTS];
+        case EV_STREAK:
+            return sMem[sub][M_KILLS];
+        case EV_BOSS:
+            return sMem[sub][M_BOSSES];
+        default:
+            return 0;
+    }
+}
+
+// Talk about something that happened lately, if there's anything: true if they did
+static bool StartReactive() {
+    u32 window = (u32)(Tune("memory_recent_seconds", 180.0f) * COMP_FPS);
+    for (auto it = sEvents.rbegin(); it != sEvents.rend(); ++it) {
+        MemEvent& e = *it;
+        if (e.used || (sClock - e.clock > window)) {
+            continue;
+        }
+        const Banter* b;
+        int a, sub;
+        if (!PickReactive(e, &b, &a, &sub)) {
+            continue;
+        }
+        e.used = true;
+        std::string an = Def(sComp[a]).name, bn = Def(sComp[sub]).name;
+        int n = EventCount(e, sub);
+        s32 delay = 0;
+        for (size_t i = 0; i < b->lines.size(); i++) {
+            int w = (i % 2 == 0) ? a : sub;
+            std::string line = Fill(b->lines[i], an, bn, n);
+            sPending.push_back({ w, line, delay });
+            delay = (s32)(Tune("bubble_seconds", 2.5f) * COMP_FPS + (f32)line.size() * 0.9f) + 6;
+        }
+        return true;
+    }
+    return false;
+}
+
+// What she'd chat about, given how she feels (L_CHAT when nothing stands out)
+static int MoodKind(int w) {
+    const Mood& m = sMood[w];
+    if (m.energy < Tune("tired_below", 0.3f)) {
+        return L_TIRED;
+    }
+    if (m.worry > 0.6f) {
+        return L_WORRIED;
+    }
+    if (m.boredom > 0.7f) {
+        return L_BORED;
+    }
+    if (m.cheer > 0.8f) {
+        return L_GLAD;
+    }
+    return L_CHAT;
+}
+
+static bool AnyTired() {
+    for (int i = 0; i < COMP_COUNT; i++) {
+        if ((sComp[i] != nullptr) && (sMood[i].energy < Tune("tired_below", 0.3f) + 0.05f)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static s32 sFightKills[COMP_COUNT];
+static s32 sCalmFrames = 0;
+
+// Each frame: moods drift with what's going on
+static void UpdateMoods(PlayState* play, Player* player) {
+    LoadMemory();
+    sClock++;
+    bool fighting = false;
+    for (int i = 0; i < COMP_COUNT; i++) {
+        fighting = fighting || ((sComp[i] != nullptr) && (sComp[i]->target != nullptr));
+    }
+    sCalmFrames = fighting ? 0 : sCalmFrames + 1;
+    if (sCalmFrames > 5 * COMP_FPS) {
+        for (int i = 0; i < COMP_COUNT; i++) {
+            sFightKills[i] = 0;
+        }
+    }
+    f32 sec = 1.0f / (f32)COMP_FPS;
+    f32 health = (gSaveContext.healthCapacity > 0) ? (f32)gSaveContext.health / (f32)gSaveContext.healthCapacity : 1.0f;
+    for (int i = 0; i < COMP_COUNT; i++) {
+        Comp* c = sComp[i];
+        if ((c == nullptr) || c->hidden) {
+            continue;
+        }
+        Mood& m = sMood[i];
+        // Energy: walking tires her (slowly; children at night faster), resting and songs bring it back
+        bool moving = c->actor.speedXZ > 1.0f;
+        f32 drain = sec / (60.0f * (moving ? Tune("tire_minutes_moving", 25.0f) : Tune("tire_minutes_still", 90.0f)));
+        if (IS_NIGHT && !c->adult) {
+            drain *= 1.6f;
+        }
+        Nudge(&m.energy, -drain);
+        if (c->state == ST_REST) {
+            Nudge(&m.energy, sec / Tune("rest_full_seconds", 25.0f));
+        }
+        // Boredom: Link standing about while nothing happens; exploring, fights and songs cure it
+        if ((c->state == ST_EXPLORE) || (c->state == ST_REST) || fighting) {
+            Nudge(&m.boredom, -sec / 8.0f);
+        } else if (player->actor.speedXZ < 0.5f) {
+            Nudge(&m.boredom, sec / Tune("bored_seconds", 75.0f));
+        } else {
+            Nudge(&m.boredom, -sec / 120.0f);
+        }
+        // Worry: Link hurt, a fight, a dungeon
+        f32 want = (1.0f - health) * 1.1f + (fighting ? 0.25f : 0.0f) + (IsDungeon(play->sceneNum) ? 0.12f : 0.0f);
+        Math_ApproachF(&m.worry, CLAMP(want, 0.0f, 1.0f), 1.0f, sec / 5.0f);
+        // Cheer settles back slowly
+        Math_ApproachF(&m.cheer, 0.6f, 1.0f, sec / 150.0f);
+        // Getting tired: she says so (once, until she's rested)
+        if (m.energy < Tune("tired_below", 0.3f)) {
+            if (!m.tiredSaid) {
+                m.tiredSaid = true;
+                Remember(EV_TIRED, i);
+            }
+        } else if (m.energy > 0.5f) {
+            m.tiredSaid = false;
+        }
+    }
+    if ((sClock % (30 * COMP_FPS)) == 0) {
+        sMemDirty = true;
+        SaveMemory();
+    }
+}
+
 static void OnFrame() {
     PlayState* play = gPlayState;
 
@@ -3903,6 +4712,7 @@ static void OnFrame() {
         return;
     }
     UpdateSong(play, player);
+    UpdateMoods(play, player);
     // Everyone who's on, at Link's side
     for (int i = 0; i < COMP_COUNT; i++) {
         if (WhoOn(i) && (sComp[i] == nullptr)) {
@@ -4000,7 +4810,12 @@ static void OnFrame() {
     } else {
         sStillFrames = 0;
     }
-    if ((sStillFrames == (s32)(Tune("idle_seconds", 15.0f) * COMP_FPS)) && !StartSong(play, player)) {
+    // (someone tired: they'd like a rest sooner)
+    if (AnyTired() && (sStillFrames == (s32)(Tune("idle_seconds", 15.0f) * 0.5f * COMP_FPS))) {
+        StartSong(play, player);
+    }
+    if ((sStillFrames == (s32)(Tune("idle_seconds", 15.0f) * COMP_FPS)) && (sSong.performer < 0) &&
+        !StartSong(play, player)) {
         int w = RandomPresent();
         if (w >= 0) {
             SayKind(w, L_IDLE);
@@ -4019,6 +4834,7 @@ static void OnFrame() {
         if (w >= 0) {
             SayKind(w, L_LOW_HEALTH);
         }
+        Remember(EV_LOWHP, -1);
         sLowHealthCooldown = 60 * COMP_FPS;
     }
     if (sCheerCooldown > 0) {
@@ -4052,7 +4868,9 @@ static void OnFrame() {
         for (int i = 0; i < COMP_COUNT; i++) {
             present += (sComp[i] != nullptr) ? 1 : 0;
         }
-        if ((present >= 2) && (Rand_ZeroOne() < Tune("banter_chance", 0.55f))) {
+        if ((present >= 2) && StartReactive()) {
+            // (talking about something that happened)
+        } else if ((present >= 2) && (Rand_ZeroOne() < Tune("banter_chance", 0.55f))) {
             StartBanter();
         } else {
             int w = RandomPresent(sLastTalker);
@@ -4063,8 +4881,12 @@ static void OnFrame() {
                 if (IsKeyScene(play->sceneNum) && (Rand_ZeroOne() < 0.4f)) {
                     KeyTip(play, w);
                 } else {
-                    SayKind(w, L_CHAT);
-                    if (Rand_ZeroOne() < 0.5f) {
+                    // (how she feels shows in what she says)
+                    int kind = MoodKind(w);
+                    SayKind(w, ((kind != L_CHAT) && (Rand_ZeroOne() < Tune("mood_talk", 0.65f))) ? kind : L_CHAT);
+                    if (kind == L_TIRED) {
+                        Emote(sComp[w], Def(sComp[w]).worried, 40, 1);
+                    } else if (Rand_ZeroOne() < 0.5f) {
                         Emote(sComp[w], Def(sComp[w]).happy, 40, -1);
                     }
                 }
@@ -4078,6 +4900,10 @@ static void OnSceneInit(int16_t sceneNum) {
     sSong.performer = -1;
     sSong.music = false;
     sPoiSeenCount = 0;
+    SaveMemory();
+    for (int i = 0; i < COMP_COUNT; i++) {
+        sMood[i].boredom *= 0.5f; // (somewhere new)
+    }
     if (sLinkSits) {
         sLinkSits = false;
         if (sHugWho < 0) {
@@ -4101,8 +4927,20 @@ static void OnEnemyDefeat(void* actor) {
     if (!On() || (gPlayState == nullptr)) {
         return;
     }
+    // Who helped: a monster one of them was fighting counts as hers (three in one fight: she's proud of it)
+    for (int i = 0; i < COMP_COUNT; i++) {
+        if ((sComp[i] != nullptr) && (sComp[i]->target == a)) {
+            LoadMemory();
+            sMem[i][M_KILLS]++;
+            sMemDirty = true;
+            if (++sFightKills[i] == 3) {
+                Remember(EV_STREAK, i);
+            }
+        }
+    }
     // Everyone cheers a boss; the odd enemy gets a word now and then
     if (a->category == ACTORCAT_BOSS) {
+        Remember(EV_BOSS, -1);
         int w = RandomPresent();
         if (w >= 0) {
             SayKind(w, L_BOSS);
@@ -4121,6 +4959,24 @@ static void OnEnemyDefeat(void* actor) {
             SayKind(w, L_CHEER);
             sCheerCooldown = (s32)(Tune("cheer_cooldown_seconds", 20.0f) * COMP_FPS);
         }
+    }
+}
+
+// Link gets something big: someone has something to say about it
+static void OnItemReceive(GetItemEntry entry) {
+    if (!On() || (gPlayState == nullptr)) {
+        return;
+    }
+    if ((entry.getItemCategory != ITEM_CATEGORY_MAJOR) && (entry.getItemCategory != ITEM_CATEGORY_BOSS_KEY)) {
+        return;
+    }
+    int w = RandomPresent();
+    if (w >= 0) {
+        Pending p = { w, Pick(sLines[sComp[w]->persona][L_ITEM_GET]), (s32)(Tune("item_line_delay", 3.0f) * COMP_FPS) };
+        if (!p.text.empty()) {
+            sPending.push_back(p);
+        }
+        Nudge(&sMood[w].cheer, 0.1f);
     }
 }
 
@@ -4201,6 +5057,7 @@ static void RegisterCompanions() {
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>(OnFrame);
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnSceneInit>(OnSceneInit);
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnEnemyDefeat>(OnEnemyDefeat);
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnItemReceive>(OnItemReceive);
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnOpenText>(OnOpenText);
     gCompanionPlayerLimbHook = LinkLimbHook;
 }
