@@ -467,13 +467,17 @@ enum LineKind {
     L_HOLD,
     L_LET_GO,
     L_LOOKED_AT,
+    L_SONG_START,  // the one who performs, sitting down to play or sing
+    L_SONG_LISTEN, // someone listening, partway through
+    L_SONG_END,    // the performer, when it's over
+    L_SONG_PRAISE, // the listeners, when it's over
     L_KIND_COUNT
 };
 static const char* sKindKey[L_KIND_COUNT] = { "enter",  "idle",     "low_health", "cheer",    "boss",     "night",
                                               "attack", "hurt",     "ko",         "revive",   "support",  "chat",
                                               "talk",   "key_here", "key_near",   "key_none", "key_held", "dungeon",
                                               "water",  "wait",     "prompt",     "hug",      "hug_seen", "hold",
-                                              "let_go", "looked_at" };
+                                              "let_go", "looked_at", "song_start", "song_listen", "song_end", "song_praise" };
 
 typedef std::vector<std::string> Lines;
 static Lines sLines[P_COUNT][L_KIND_COUNT];
@@ -817,6 +821,40 @@ static void BuildLines() {
     Add(P_ZELDA_A, L_LET_GO, { "Alright.", "I'm still with you." });
     Add(P_ZELDA_A, L_LOOKED_AT, { "Yes, Link? What is it?", "Is something on your mind?" });
 
+    // Resting together: a song
+    Add(P_SARIA, L_SONG_START, { "Let's rest a while. Sit down, I'll play our song for you!",
+                                 "You look tired, Link. Here... listen to the forest's song." });
+    Add(P_MALON_Y, L_SONG_START, { "Wanna hear Epona's Song? My mom taught it to me!",
+                                   "Sit down, fairy boy! I'll sing for everybody!" });
+    Add(P_MALON_A, L_SONG_START, { "Sit a spell, fairy boy. I'll sing you something.",
+                                   "Epona always calms down when I sing this. Maybe you will too." });
+    Add(P_ZELDA_Y, L_SONG_START, { "Impa hums this to me when I can't sleep... let me hum it for you.",
+                                   "Let's rest. This is a song only the royal family knows." });
+    Add(P_ZELDA_A, L_SONG_START, { "Rest, Link. This is the lullaby of the royal family.",
+                                   "Impa sang this to me long ago. Now it's my turn." });
+    Add(P_SARIA, L_SONG_LISTEN, { "Mm... I could listen to this all day.", "It makes me think of home." });
+    Add(P_RUTO_Y, L_SONG_LISTEN, { "I'm NOT swaying! ...Okay, maybe a little.",
+                                   "Hmph. Zora music is better. ...This is nice though." });
+    Add(P_RUTO_A, L_SONG_LISTEN, { "It reminds me of the waters of Zora's Domain... calm and clear.",
+                                   "Shh, Link. I'm listening." });
+    Add(P_MALON_Y, L_SONG_LISTEN, { "Ooh, I know this one!", "La la laaa..." });
+    Add(P_MALON_A, L_SONG_LISTEN, { "That's lovely... I might have to learn it.", "Mm, I could fall asleep..." });
+    Add(P_ZELDA_Y, L_SONG_LISTEN, { "What a beautiful melody...", "I wish the whole kingdom could hear this." });
+    Add(P_ZELDA_A, L_SONG_LISTEN, { "It's been so long since I could just... listen.", "Peaceful..." });
+    Add(P_SARIA, L_SONG_END, { "Hee hee! Did you like it?", "Whenever you miss me, just play it too, okay?" });
+    Add(P_MALON_Y, L_SONG_END, { "Ta-daa! Was I good?", "Hee hee! Epona likes that part best!" });
+    Add(P_MALON_A, L_SONG_END, { "Well? Not bad for a farm girl, huh?", "Thanks for listening, fairy boy." });
+    Add(P_ZELDA_Y, L_SONG_END, { "Remember this melody, Link. It may help you one day.", "Did it help you rest?" });
+    Add(P_ZELDA_A, L_SONG_END, { "Thank you for listening, Link.", "Shall we go on? I feel ready now." });
+    Add(P_SARIA, L_SONG_PRAISE, { "That was beautiful!", "Yay! Again sometime!" });
+    Add(P_RUTO_Y, L_SONG_PRAISE, { "Hmph... that was... acceptable. Fine, it was lovely!",
+                                   "Not bad! Not as good as me, but not bad!" });
+    Add(P_RUTO_A, L_SONG_PRAISE, { "Even the Zoras would applaud that.", "Lovely. Truly." });
+    Add(P_MALON_Y, L_SONG_PRAISE, { "Yay! Again, again!", "That was so pretty!" });
+    Add(P_MALON_A, L_SONG_PRAISE, { "That was lovely!", "You've got a gift, you know that?" });
+    Add(P_ZELDA_Y, L_SONG_PRAISE, { "How wonderful!", "Bravo!" });
+    Add(P_ZELDA_A, L_SONG_PRAISE, { "Beautiful... thank you.", "Wonderful." });
+
     // Places
     AddScene(SCENE_KOKIRI_FOREST, P_SARIA, { "Home... it looks smaller now, doesn't it?" });
     AddScene(SCENE_KOKIRI_FOREST, P_RUTO_Y, { "So THIS is where you grew up? Everything's so tiny!" });
@@ -962,7 +1000,7 @@ static void LoadExtraLines() {
 
 struct CompModel;
 
-enum CompState { ST_FOLLOW, ST_IDLE, ST_ATTACK, ST_SUPPORT, ST_HURT, ST_KO, ST_EMOTE, ST_TALK, ST_HUG };
+enum CompState { ST_FOLLOW, ST_IDLE, ST_ATTACK, ST_SUPPORT, ST_HURT, ST_KO, ST_EMOTE, ST_TALK, ST_HUG, ST_REST };
 
 typedef struct {
     Actor actor;
@@ -1029,6 +1067,11 @@ typedef struct {
     Vec3s bodyJoints[PLAYER_LIMB_BUF_COUNT];
     Vec3s bodyMorph[PLAYER_LIMB_BUF_COUNT];
     const char* bodyAnim;
+    // Resting together (a song): where she sits, whether she's there yet, and how far into sitting she is
+    Vec3f seat;
+    u8 seated;
+    s16 seatTimer;
+    f32 sitAmount;
 } Comp;
 
 static s16 sHugWho = -1;
@@ -1987,7 +2030,9 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
 
 static void Emote(Comp* c, const char* anim, s16 frames, s16 eye) {
     // (hand in hand she keeps walking with him)
-    if ((anim == nullptr) || (c->holdSide != 0)) {
+    // (nor does one interrupt a hug, a talk, a song or her lying down: a hug left that way never ended)
+    if ((anim == nullptr) || (c->holdSide != 0) || (c->state == ST_HUG) || (c->state == ST_TALK) ||
+        (c->state == ST_REST) || (c->state == ST_KO)) {
         return;
     }
     c->state = ST_EMOTE;
@@ -2087,6 +2132,313 @@ static void UpdateHug(PlayState* play, Comp* c, Player* player) {
     u16 press = play->state.input[0].press.button;
     if ((c->timer > 15) && (CHECK_BTN_ANY(press, BTN_A | BTN_B))) {
         EndHug(play, c);
+    }
+}
+
+// ---- Resting together: a song ----
+// Link stands still a while: the girls sit around him and one of them performs. Saria plays Saria's Song on her
+// ocarina, Malon sings Epona's Song (the ranch's song, her voice up front), Zelda hums Zelda's Lullaby. The others
+// sit and listen, swaying a little. Moving (or a button, or an enemy) ends it.
+
+#define SONG_START_SEQ(playerIdx, fadeTimer, seqId) \
+    Audio_QueueSeqCmd(0x00000000 | ((u8)(playerIdx) << 24) | ((u8)(fadeTimer) << 0x10) | (u16)(seqId))
+
+
+struct SongState {
+    s8 performer = -1; // who's performing (-1: no song)
+    s8 last = -1;      // who performed last time (the next one is someone else, if there's anyone else)
+    u16 seq = 0;
+    u16 prevSeq = NA_BGM_DISABLED;
+    bool music = false;
+    s32 timer = 0;
+    s32 frames = 0;
+    bool listenSaid = false;
+};
+static SongState sSong;
+
+static bool RestSongsOn() {
+    return CVarGetInteger(COMP_CVAR("RestSongs"), 1) != 0;
+}
+
+static u16 SongSeqFor(int persona) {
+    switch (persona) {
+        case P_SARIA:
+            return NA_BGM_SARIA_THEME;
+        case P_MALON_Y:
+        case P_MALON_A:
+            return NA_BGM_LONLON;
+        case P_ZELDA_Y:
+        case P_ZELDA_A:
+            return NA_BGM_ZELDA_THEME;
+        default:
+            return 0;
+    }
+}
+
+// Whether she's sitting on the ground now (her legs folded, her hips down)
+static bool SitsNow(Comp* c) {
+    const PersonaDef& d = Def(c);
+    if (c->state == ST_REST) {
+        // (Malon stands to sing, like at the ranch)
+        bool standsToSing = (sSong.performer == c->who) && ((c->persona == P_MALON_Y) || (c->persona == P_MALON_A));
+        return c->seated && !standsToSing;
+    }
+    if (c->anim == nullptr) {
+        return false;
+    }
+    // (her own sitting animations are on a stump or a ledge: on the ground she folds her legs instead)
+    if ((d.sit != nullptr) && (c->anim == d.sit)) {
+        return true;
+    }
+    // Saria plays her ocarina sitting down
+    return (c->persona == P_SARIA) && (c->anim == d.support);
+}
+
+static bool CanRest(Comp* c) {
+    return (c != nullptr) && !c->hidden && !c->swimming &&
+           ((c->state == ST_FOLLOW) || (c->state == ST_IDLE) || (c->state == ST_EMOTE));
+}
+
+static void EndSong(PlayState* play, bool finished) {
+    if (sSong.performer < 0) {
+        return;
+    }
+    int performer = sSong.performer;
+    sSong.last = sSong.performer;
+    sSong.performer = -1;
+    // The music back as it was (unless something else has changed it since)
+    if (sSong.music && (play != nullptr) && ((func_800FA0B4(SEQ_PLAYER_BGM_MAIN) & 0xFF) == (sSong.seq & 0xFF))) {
+        if (sSong.prevSeq == NA_BGM_NATURE_AMBIENCE) {
+            Audio_PlayNatureAmbienceSequence(play->sequenceCtx.natureAmbienceId);
+        } else if (sSong.prevSeq == NA_BGM_DISABLED) {
+            Audio_SeqCmd1(SEQ_PLAYER_BGM_MAIN, 0);
+        } else {
+            SONG_START_SEQ(SEQ_PLAYER_BGM_MAIN, 0, sSong.prevSeq);
+        }
+    }
+    sSong.music = false;
+    bool praised = false;
+    for (int i = 0; i < COMP_COUNT; i++) {
+        Comp* c = sComp[i];
+        if ((c == nullptr) || (c->state != ST_REST)) {
+            continue;
+        }
+        c->state = ST_FOLLOW;
+        c->seated = 0;
+        c->eyeOverride = -1;
+        if (finished && (i != performer)) {
+            Emote(c, Def(c).happy, 40, -1); // (clapping)
+            if (!praised && (Rand_ZeroOne() < 0.7f)) {
+                praised = true;
+                std::string line = Pick(sLines[c->persona][L_SONG_PRAISE]);
+                if (!line.empty()) {
+                    sPending.push_back({ i, line, (s32)(1.2f * COMP_FPS) });
+                }
+            }
+        }
+    }
+    if (finished && (sComp[performer] != nullptr)) {
+        SayKind(performer, L_SONG_END);
+    }
+}
+
+static bool StartSong(PlayState* play, Player* player) {
+    if (!RestSongsOn() || (sSong.performer >= 0) || (sHugWho >= 0) ||
+        !(player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) || LinkSwimming(player) ||
+        (player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) || (play->msgCtx.msgMode != MSGMODE_NONE)) {
+        return false;
+    }
+    // Who could perform (someone else than last time, if there's anyone else)
+    std::vector<int> can, fresh;
+    int present = 0;
+    for (int i = 0; i < COMP_COUNT; i++) {
+        Comp* c = sComp[i];
+        if (!CanRest(c)) {
+            continue;
+        }
+        present++;
+        // (no song with enemies about)
+        if ((c->target != nullptr) || (FindTarget(play, c) != nullptr)) {
+            return false;
+        }
+        if (SongSeqFor(c->persona) != 0) {
+            can.push_back(i);
+            if (i != sSong.last) {
+                fresh.push_back(i);
+            }
+        }
+    }
+    if (can.empty()) {
+        return false;
+    }
+    std::vector<int>& pool = fresh.empty() ? can : fresh;
+    int who = pool[(size_t)(Rand_ZeroOne() * (f32)pool.size()) % pool.size()];
+    Comp* p = sComp[who];
+
+    sSong.performer = (s8)who;
+    sSong.seq = SongSeqFor(p->persona);
+    sSong.music = false;
+    sSong.frames = 0;
+    sSong.listenSaid = false;
+    sSong.timer = (s32)(Tune("song_seconds", 45.0f) * COMP_FPS);
+
+    // Seats: the performer in front of Link, the others in a half circle around him
+    s16 face = player->actor.shape.rot.y;
+    f32 front = Tune("song_performer_distance", 75.0f);
+    f32 ring = Tune("song_ring_distance", 60.0f);
+    static const s16 sAround[] = { 0x2C00, -0x2C00, 0x5000, -0x5000, 0x7000, -0x7000 };
+    int k = 0;
+    for (int i = 0; i < COMP_COUNT; i++) {
+        Comp* c = sComp[i];
+        if (!CanRest(c)) {
+            continue;
+        }
+        s16 yaw = face;
+        f32 dist = front;
+        if (i != who) {
+            yaw = (s16)(face + sAround[k % 6]);
+            dist = ring + (f32)(k / 6) * 25.0f;
+            k++;
+        }
+        c->seat = player->actor.world.pos;
+        c->seat.x += Math_SinS(yaw) * dist;
+        c->seat.z += Math_CosS(yaw) * dist;
+        c->state = ST_REST;
+        c->seated = 0;
+        c->seatTimer = 0;
+        c->target = nullptr;
+        c->wandering = 0;
+    }
+    SayKind(who, L_SONG_START);
+    return true;
+}
+
+// Each frame, while there's a song
+static void UpdateSong(PlayState* play, Player* player) {
+    if (sSong.performer < 0) {
+        return;
+    }
+    Comp* p = sComp[sSong.performer];
+    if ((p == nullptr) || (p->state != ST_REST) || !RestSongsOn()) {
+        EndSong(play, false);
+        return;
+    }
+    sSong.frames++;
+    // Link moves, uses something, or gets busy: it's over
+    Input* in = &play->state.input[0];
+    u16 press = in->press.button;
+    bool stick = (ABS(in->rel.stick_x) > 15) || (ABS(in->rel.stick_y) > 15);
+    bool buttons = CHECK_BTN_ANY(press, BTN_A | BTN_B | BTN_Z | BTN_R | BTN_CLEFT | BTN_CRIGHT | BTN_CDOWN);
+    if ((sSong.frames > 10) &&
+        (stick || buttons || (player->actor.speedXZ > 0.5f) || (play->msgCtx.msgMode != MSGMODE_NONE))) {
+        EndSong(play, false);
+        return;
+    }
+    // An enemy turns up
+    if ((sSong.frames % 10) == 0) {
+        for (int i = 0; i < COMP_COUNT; i++) {
+            if ((sComp[i] != nullptr) && (sComp[i]->state == ST_REST) && (FindTarget(play, sComp[i]) != nullptr)) {
+                EndSong(play, false);
+                return;
+            }
+        }
+    }
+    // The music starts once she's in her place (or after a moment)
+    if (!sSong.music && (p->seated || (sSong.frames > 3 * COMP_FPS))) {
+        sSong.music = true;
+        sSong.prevSeq = func_800FA0B4(SEQ_PLAYER_BGM_MAIN);
+        SONG_START_SEQ(SEQ_PLAYER_BGM_MAIN, 0, sSong.seq);
+    }
+    if (sSong.music) {
+        if (sSong.seq == NA_BGM_LONLON) {
+            Audio_UpdateMalonSinging(0.0f, NA_BGM_LONLON); // (her voice, as if he were right by her at the ranch)
+        }
+        // Halfway, someone listening says something
+        if (!sSong.listenSaid && (sSong.timer < (s32)(Tune("song_seconds", 45.0f) * COMP_FPS * 0.55f))) {
+            sSong.listenSaid = true;
+            std::vector<int> listeners;
+            for (int i = 0; i < COMP_COUNT; i++) {
+                if ((i != sSong.performer) && (sComp[i] != nullptr) && (sComp[i]->state == ST_REST)) {
+                    listeners.push_back(i);
+                }
+            }
+            if (!listeners.empty() && (Rand_ZeroOne() < 0.8f)) {
+                SayKind(listeners[(size_t)(Rand_ZeroOne() * (f32)listeners.size()) % listeners.size()],
+                        L_SONG_LISTEN);
+            }
+        }
+        if (--sSong.timer <= 0) {
+            EndSong(play, true);
+        }
+    }
+}
+
+// Her part: to her seat, then sitting (or standing, singing) through the song
+static void UpdateRest(PlayState* play, Comp* c, Player* player) {
+    const PersonaDef& d = Def(c);
+    bool performer = (sSong.performer == c->who);
+    if (sSong.performer < 0) {
+        c->state = ST_FOLLOW;
+        c->seated = 0;
+        return;
+    }
+    if (!c->seated) {
+        f32 dx = c->seat.x - c->actor.world.pos.x;
+        f32 dz = c->seat.z - c->actor.world.pos.z;
+        f32 dist = sqrtf(dx * dx + dz * dz);
+        if ((dist < 8.0f) || (++c->seatTimer > 3 * COMP_FPS)) {
+            c->seated = 1;
+            c->actor.speedXZ = 0.0f;
+        } else {
+            c->actor.world.rot.y = Math_Vec3f_Yaw(&c->actor.world.pos, &c->seat);
+            Math_SmoothStepToS(&c->actor.shape.rot.y, c->actor.world.rot.y, 3, 0x1000, 0x100);
+            c->actor.speedXZ = CLAMP(dist * 0.25f, 1.5f, 5.0f);
+            bool mixWalk = MixamoOn() && (c->rigState == 1) && (c->rig.lThigh != 0);
+            if ((d.move != nullptr) && !mixWalk && !(c->linkWalk && CVarGetInteger(COMP_CVAR("LinkWalk"), 1))) {
+                SetAnim(c, d.move, std::max(0.6f, c->actor.speedXZ * d.moveAnimSpeed), ANIMMODE_LOOP, -5.0f);
+            } else {
+                SetAnim(c, d.idle, 1.0f, ANIMMODE_LOOP, -6.0f);
+            }
+            return;
+        }
+    }
+    c->actor.speedXZ = 0.0f;
+    // The performer faces Link; the others face her
+    s16 yaw = c->actor.yawTowardsPlayer;
+    if (!performer && (sComp[sSong.performer] != nullptr)) {
+        yaw = Math_Vec3f_Yaw(&c->actor.world.pos, &sComp[sSong.performer]->actor.world.pos);
+    }
+    Math_SmoothStepToS(&c->actor.shape.rot.y, yaw, 4, 0x800, 0x80);
+    c->actor.world.rot.y = c->actor.shape.rot.y;
+
+    if (performer) {
+        switch (c->persona) {
+            case P_SARIA:
+                SetAnim(c, d.support, 1.0f, ANIMMODE_LOOP, -8.0f); // (her ocarina)
+                c->eyeOverride = 2;
+                break;
+            case P_MALON_Y:
+            case P_MALON_A:
+                SetAnim(c, d.support, 1.0f, ANIMMODE_LOOP, -8.0f); // (singing)
+                if (sSong.music) {
+                    c->mouthTimer = 12;
+                }
+                c->eyeOverride = ((sSong.frames / 60) % 3 == 2) ? 2 : -1;
+                break;
+            default:
+                // Zelda hums, eyes closed
+                SetAnim(c, d.idle, 1.0f, ANIMMODE_LOOP, -8.0f);
+                c->eyeOverride = 2;
+                if (sSong.music && ((sSong.frames / 40) % 2 == 0)) {
+                    c->mouthTimer = 6;
+                }
+                break;
+        }
+    } else {
+        // (young Ruto has her own sitting; the others sit with their hands on their knees)
+        SetAnim(c, (c->persona == P_RUTO_Y) ? d.sit : d.idle, 1.0f, ANIMMODE_LOOP, -8.0f);
+        // Eyes half closed now and then, enjoying it
+        c->eyeOverride = (sSong.music && (((sSong.frames + c->who * 37) / 90) % 2 == 1)) ? 1 : -1;
     }
 }
 
@@ -2273,7 +2625,10 @@ static void LinkLimbHook(PlayState* play, s32 limbIndex, Vec3f* pos, Vec3s* rot,
 static void UpdateRig(PlayState* play, Comp* c, Player* player) {
     c->rigOut.mask = 0;
     c->rigOut.rootDY = 0.0f;
-    if (!MixamoOn() || (c->rigState == 2)) {
+    // (sitting on the ground is done on her bones even with Mixamo motion off)
+    bool sits = SitsNow(c);
+    Math_ApproachF(&c->sitAmount, sits ? 1.0f : 0.0f, 0.25f, 0.08f);
+    if ((!MixamoOn() && (c->sitAmount <= 0.0f)) || (c->rigState == 2)) {
         return;
     }
     // With a custom model: Link's skeleton under her model, Link's own walk, the rig only for hugs and hands
@@ -2340,7 +2695,7 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
     f32 rate = Tune("mixamo_rate", 1.5f); // (clips are 30 frames a second, the game 20)
 
     // A bow (Saria's slingshot, adult Ruto's and Zelda's arrows): drawn, held, and the recoil after the shot
-    if (c->bowClip >= 0) {
+    if ((c->bowClip >= 0) && MixamoOn()) {
         const CompClip& bc = sClips[c->bowClip];
         c->bowFrame += rate * Tune("bow_rate", 1.2f);
         if (c->bowFrame >= (f32)(bc.frames - 1)) {
@@ -2355,7 +2710,7 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
             c->bowClip = -1;
         }
     }
-    if (c->bowClip >= 0) {
+    if ((c->bowClip >= 0) && MixamoOn()) {
         mix.clip[0] = c->bowClip;
         mix.frame[0] = c->bowFrame;
         mix.weight[0] = 1.0f;
@@ -2364,7 +2719,7 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
     } else {
         // Walking and running (and side steps hand in hand)
         f32 speed = ((c->holdSide != 0) && (c->holdWalk >= 0.0f)) ? c->holdWalk : fabsf(c->actor.speedXZ);
-        bool moving = (c->model == nullptr) && !c->swimming && (c->state != ST_KO) && (c->state != ST_HUG) &&
+        bool moving = MixamoOn() && (c->model == nullptr) && !c->swimming && (c->state != ST_KO) && (c->state != ST_HUG) &&
                       (speed > 0.8f) && (c->actor.bgCheckFlags & BGCHECKFLAG_GROUND);
         Math_ApproachF(&c->mixAmount, moving ? 1.0f : 0.0f, 0.35f, 0.12f);
         if (c->mixAmount <= 0.0f) {
@@ -2436,6 +2791,25 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
     Math_ApproachF(&c->hugAmount, (c->state == ST_HUG) ? 1.0f : 0.0f, 0.3f, 0.15f);
     if (c->hugAmount > 0.0f) {
         CompRig_SolveDirs(sk, &c->rig, sHugDirs, sHugUse, c->hugAmount, &c->rigOut);
+    }
+    // Sitting on the ground: knees up, hips down near the ground, her hands on her knees (unless her arms are busy
+    // with an ocarina or a song)
+    if (c->sitAmount > 0.0f) {
+        static const float sSitDirs[8][3] = { { 0.18f, 0.35f, 0.92f },  { 0.05f, -0.55f, 0.83f },
+                                              { -0.18f, 0.35f, 0.92f }, { -0.05f, -0.55f, 0.83f },
+                                              { 0.25f, -0.75f, 0.6f },  { 0.05f, -0.35f, 0.94f },
+                                              { -0.25f, -0.75f, 0.6f }, { -0.05f, -0.35f, 0.94f } };
+        const PersonaDef& d = Def(c);
+        bool armsFree = (c->model != nullptr) || ((c->anim == d.idle) && (c->persona != P_RUTO_Y)) ||
+                        ((c->persona == P_SARIA) && (c->anim == d.sit));
+        bool use[8] = { true, true, true, true, armsFree, armsFree, armsFree, armsFree };
+        CompRig_SolveDirs(sk, &c->rig, sSitDirs, use, c->sitAmount, &c->rigOut);
+        if (c->rigOut.mask != 0) {
+            // Her hips (the root) brought down to just above the ground, wherever her animation holds them
+            f32 hipNow = (f32)sk->jointTable[0].y + c->actor.shape.yOffset;
+            f32 hipSit = c->legLen * Tune((pk + ".sit_hip").c_str(), Tune("sit_hip", 0.14f));
+            c->rigOut.rootDY += (hipSit - hipNow) * c->sitAmount;
+        }
     }
     // Hand in hand: her arm on his side reaches for his hand
     if ((c->holdSide != 0) && (c->state == ST_FOLLOW)) {
@@ -2591,6 +2965,9 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
         case ST_HUG:
             UpdateHug(play, c, player);
             break;
+        case ST_REST:
+            UpdateRest(play, c, player);
+            break;
         default:
             if (!ThinkFight(play, c, player)) {
                 Follow(play, c, player);
@@ -2598,7 +2975,12 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
             break;
     }
     if (c->state != ST_KO) {
-        Math_SmoothStepToS(&c->actor.shape.rot.z, 0, 4, 0x800, 0x100);
+        // (listening to a song, a gentle sway)
+        s16 sway = 0;
+        if ((c->state == ST_REST) && c->seated && sSong.music && (sSong.performer != c->who)) {
+            sway = (s16)(Math_SinS((s16)(sSong.frames * 0x280 + c->who * 0x2800)) * Tune("song_sway", 900.0f));
+        }
+        Math_SmoothStepToS(&c->actor.shape.rot.z, sway, 4, 0x800, 0x40);
     }
 
     // While there's a fight she can't be Z-targeted (his lock-on goes to the enemies)
@@ -3086,9 +3468,21 @@ static void OnFrame() {
         return;
     }
     Player* player = GET_PLAYER(play);
+    // A hug whose girl is gone or doing something else: Link let go (never left held)
+    if ((sHugWho >= 0) && ((sComp[sHugWho] == nullptr) || (sComp[sHugWho]->state != ST_HUG))) {
+        sHugWho = -1;
+        Player_SetCsAction(play, nullptr, PLAYER_CSACTION_7);
+        if (sHugFreeLookWas == 0) {
+            CVarSetInteger(CVAR_SETTING("FreeLook.Enabled"), 0);
+            play->manualCamera = false;
+        }
+        sHugFreeLookWas = -1;
+    }
     if (LinkBusy(play, player)) {
+        EndSong(play, false);
         return;
     }
+    UpdateSong(play, player);
     // Everyone who's on, at Link's side
     for (int i = 0; i < COMP_COUNT; i++) {
         if (WhoOn(i) && (sComp[i] == nullptr)) {
@@ -3186,7 +3580,7 @@ static void OnFrame() {
     } else {
         sStillFrames = 0;
     }
-    if (sStillFrames == (s32)(Tune("idle_seconds", 15.0f) * COMP_FPS)) {
+    if ((sStillFrames == (s32)(Tune("idle_seconds", 15.0f) * COMP_FPS)) && !StartSong(play, player)) {
         int w = RandomPresent();
         if (w >= 0) {
             SayKind(w, L_IDLE);
@@ -3260,6 +3654,9 @@ static void OnFrame() {
 }
 
 static void OnSceneInit(int16_t sceneNum) {
+    // (a new place has its own music: nothing to give back)
+    sSong.performer = -1;
+    sSong.music = false;
     for (int i = 0; i < COMP_COUNT; i++) {
         sComp[i] = nullptr; // (the scene's actors are gone)
         sBubble[i].frames = 0;

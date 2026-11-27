@@ -1959,6 +1959,14 @@ void SohMenu::AddMenuEnhancements() {
             info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
         })
         .Options(CheckboxOptions().DefaultValue(true).Tooltip("Speech bubbles, chats and key tips."));
+    AddWidget(path, "Companions Rest Songs", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Companions.RestSongs"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "When Link stands still for a while, the girls sit down and one of them performs: Saria plays "
+            "Saria's Song, Malon sings Epona's Song, Zelda hums Zelda's Lullaby. Moving ends it."));
     AddWidget(path, "Bubble Size: %.1fx", WIDGET_CVAR_SLIDER_FLOAT)
         .CVar(CVAR_ENHANCEMENT("Companions.BubbleScale"))
         .PreFunc([](WidgetInfo& info) {
