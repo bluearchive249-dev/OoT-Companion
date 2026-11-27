@@ -422,7 +422,7 @@ static const char* sHugAnim[P_COUNT] = {
 };
 // Link's side: arms forward (companion_tuning.json "companion.hug_link_anim": 0-3)
 static const char* sLinkHugAnims[] = {
-    "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_push_wait",
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_wait",
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_kakeyori_wait",
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_carry",
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_look_hand_wait",
@@ -1010,6 +1010,7 @@ typedef struct {
     s16 bowClip;
     f32 bowFrame;
     CompRigOut rigOut;
+    f32 hugAmount;
 } Comp;
 
 static s16 sHugWho = -1;
@@ -1754,6 +1755,12 @@ static bool FollowHolding(PlayState* play, Comp* c, Player* player) {
     }
     Vec3f goal = HoldPos(c, player);
     f32 dist = Math_Vec3f_DistXZ(&c->actor.world.pos, &goal);
+    // B (his sword) lets go
+    if (CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B) && !(player->stateFlags1 & PLAYER_STATE1_TALKING)) {
+        c->holdSide = 0;
+        SayKind(c->who, L_LET_GO);
+        return false;
+    }
     if (LinkSwimming(player) ||
         (player->stateFlags1 & (PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_HANGING_OFF_LEDGE)) ||
         (dist > Tune("hold_break_distance", 140.0f)) ||
@@ -2065,6 +2072,76 @@ static bool MixamoOn() {
     return CVarGetInteger(COMP_CVAR("Mixamo"), 1) != 0;
 }
 
+// Arms around someone in front (x left, y up, z forward): upper arms forward and a little out, forearms wrapping in
+static const float sHugDirs[8][3] = { { 0, 0, 0 },
+                                      { 0, 0, 0 },
+                                      { 0, 0, 0 },
+                                      { 0, 0, 0 },
+                                      { 0.45f, -0.2f, 0.87f },
+                                      { -0.85f, 0.05f, 0.55f },
+                                      { -0.45f, -0.2f, 0.87f },
+                                      { 0.85f, 0.05f, 0.55f } };
+static const bool sHugUse[8] = { false, false, false, false, true, true, true, true };
+
+// A point in the world, in an actor's model frame (its units, before its scale)
+static Vec3f WorldToModel(Actor* a, Vec3f w) {
+    f32 dx = w.x - a->world.pos.x, dy = w.y - a->world.pos.y, dz = w.z - a->world.pos.z;
+    f32 cs = Math_CosS(a->shape.rot.y), sn = Math_SinS(a->shape.rot.y);
+    f32 sc = (a->scale.y > 0.0f) ? a->scale.y : 0.01f;
+    Vec3f m;
+    m.x = (dx * cs - dz * sn) / sc;
+    m.y = dy / sc - a->shape.yOffset;
+    m.z = (dx * sn + dz * cs) / sc;
+    return m;
+}
+
+// Where their hands meet: between them, at hand height
+static Vec3f HoldMeetPoint(Comp* c, Player* player) {
+    Vec3f m;
+    m.x = (c->actor.world.pos.x + player->actor.world.pos.x) * 0.5f +
+          Math_SinS(player->actor.shape.rot.y) * Tune("hold_hand_forward", 4.0f);
+    m.z = (c->actor.world.pos.z + player->actor.world.pos.z) * 0.5f +
+          Math_CosS(player->actor.shape.rot.y) * Tune("hold_hand_forward", 4.0f);
+    m.y = player->actor.world.pos.y +
+          (LINK_IS_ADULT ? Tune("hold_hand_height_adult", 28.0f) : Tune("hold_hand_height_child", 17.0f));
+    return m;
+}
+
+// Link's side: his arms posed in his own draw (the game's hook in z_player_lib.c), for hugs and holding hands
+extern "C" void (*gCompanionPlayerLimbHook)(PlayState* play, s32 limbIndex, Vec3f* pos, Vec3s* rot, Player* player);
+static CompRigOut sLinkOut;
+static f32 sLinkHug = 0.0f;
+static const CompRigMap sLinkRig = { 7, 8, 9, 4, 5, 6, 14, 15, 16, 17, 18, 19 };
+
+static void LinkLimbHook(PlayState* play, s32 limbIndex, Vec3f* pos, Vec3s* rot, Player* player) {
+    if (limbIndex == 1) {
+        // (once a frame, his pose final by now)
+        sLinkOut.mask = 0;
+        sLinkOut.rootDY = 0.0f;
+        if (!On() || (player->actor.category != ACTORCAT_PLAYER)) {
+            return;
+        }
+        Math_ApproachF(&sLinkHug, (sHugWho >= 0) ? 1.0f : 0.0f, 0.3f, 0.15f);
+        if (sLinkHug > 0.0f) {
+            CompRig_SolveDirs(&player->skelAnime, &sLinkRig, sHugDirs, sHugUse, sLinkHug, &sLinkOut);
+        }
+        for (int i = 0; i < COMP_COUNT; i++) {
+            Comp* c = sComp[i];
+            if ((c != nullptr) && (c->holdSide != 0) && (c->state == ST_FOLLOW) && !c->hidden) {
+                Vec3f local = WorldToModel(&player->actor, HoldMeetPoint(c, player));
+                // (she's at his right: his right hand)
+                CompRig_Reach(&player->skelAnime, &sLinkRig, c->holdSide == -1, local.x, local.y, local.z, 1.0f,
+                              &sLinkOut);
+            }
+        }
+    }
+    if ((limbIndex > 0) && (limbIndex < 32) && (sLinkOut.mask & (1u << limbIndex))) {
+        rot->x = sLinkOut.rot[limbIndex][0];
+        rot->y = sLinkOut.rot[limbIndex][1];
+        rot->z = sLinkOut.rot[limbIndex][2];
+    }
+}
+
 static void UpdateRig(PlayState* play, Comp* c, Player* player) {
     c->rigOut.mask = 0;
     c->rigOut.rootDY = 0.0f;
@@ -2127,7 +2204,6 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
         Math_ApproachF(&c->mixAmount, moving ? 1.0f : 0.0f, 0.35f, 0.12f);
         if (c->mixAmount <= 0.0f) {
             c->mixPhase = 0.0f;
-            return;
         }
         f32 legWorld = c->legLen * c->actor.scale.y;
         f32 run = CLAMP((speed - Tune("run_from", 3.5f)) / Tune("run_blend", 1.5f), 0.0f, 1.0f);
@@ -2167,8 +2243,21 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
         }
         mix.count = n;
     }
-    CompRig_Solve(&c->skel, &c->rig, &mix, c->mixAmount * Tune("mixamo_mix", 1.0f), &c->rigOut);
-    c->rigOut.rootDY *= Tune("mixamo_bob", 1.0f);
+    if (c->mixAmount > 0.0f) {
+        CompRig_Solve(&c->skel, &c->rig, &mix, c->mixAmount * Tune("mixamo_mix", 1.0f), &c->rigOut);
+        c->rigOut.rootDY *= Tune("mixamo_bob", 1.0f);
+    }
+    // A hug: both arms around him
+    Math_ApproachF(&c->hugAmount, (c->state == ST_HUG) ? 1.0f : 0.0f, 0.3f, 0.15f);
+    if (c->hugAmount > 0.0f) {
+        CompRig_SolveDirs(&c->skel, &c->rig, sHugDirs, sHugUse, c->hugAmount, &c->rigOut);
+    }
+    // Hand in hand: her arm on his side reaches for his hand
+    if ((c->holdSide != 0) && (c->state == ST_FOLLOW)) {
+        Vec3f m = HoldMeetPoint(c, player);
+        Vec3f local = WorldToModel(&c->actor, m);
+        CompRig_Reach(&c->skel, &c->rig, c->holdSide == 1, local.x, local.y, local.z, 1.0f, &c->rigOut);
+    }
 }
 
 static void Comp_Update(Actor* thisx, PlayState* play) {
@@ -2433,31 +2522,6 @@ static s32 Comp_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Ve
             rot->x = (s16)(rot->x + (s16)((f32)(s16)(a.x - b.x) * mix * sign));
             rot->y = (s16)(rot->y + (s16)((f32)(s16)(a.y - b.y) * mix * sign));
             rot->z = (s16)(rot->z + (s16)((f32)(s16)(a.z - b.z) * mix * sign));
-        }
-    }
-    // Hand in hand: the arm on his side reaches to him (degrees in companion_tuning.json: "companion.hold_arm_left"
-    // / "companion.hold_arm_right" [x, y, z], "companion.<persona>.hold_arm_left" for one of them)
-    if ((c->holdSide != 0) && (c->state == ST_FOLLOW)) {
-        // At his right, his hand is on her left
-        bool left = (c->holdSide == 1);
-        int shoulder = (int)CompTuneAt((std::string("companion.") + sPersonaKey[c->persona] + ".walk_map").c_str(),
-                                       left ? 6 : 8, sWalkMap[c->persona][left ? 6 : 8]);
-        if ((shoulder != 0) && (limbIndex == shoulder)) {
-            std::string k =
-                std::string("companion.") + sPersonaKey[c->persona] + (left ? ".hold_arm_left" : ".hold_arm_right");
-            std::string g = left ? "companion.hold_arm_left" : "companion.hold_arm_right";
-            for (int ax = 0; ax < 3; ax++) {
-                f32 deg =
-                    CompTuneAt(k.c_str(), ax, CompTuneAt(g.c_str(), ax, (ax == 2) ? (left ? 25.0f : -25.0f) : 0.0f));
-                s16 add = (s16)(deg * (65536.0f / 360.0f));
-                if (ax == 0) {
-                    rot->x = (s16)(rot->x + add);
-                } else if (ax == 1) {
-                    rot->y = (s16)(rot->y + add);
-                } else {
-                    rot->z = (s16)(rot->z + add);
-                }
-            }
         }
     }
     // Adult Zelda's hair hangs from her head in seven pieces (as in the castle escape, at rest)
@@ -3075,6 +3139,7 @@ static void RegisterCompanions() {
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnSceneInit>(OnSceneInit);
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnEnemyDefeat>(OnEnemyDefeat);
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnOpenText>(OnOpenText);
+    gCompanionPlayerLimbHook = LinkLimbHook;
 }
 
 static RegisterShipInitFunc initFunc(RegisterCompanions, {});

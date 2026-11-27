@@ -33,5 +33,16 @@ struct CompClipMix {
 };
 void CompRig_Solve(SkelAnime* skel, const CompRigMap* map, const CompClipMix* mix, float amount, CompRigOut* out);
 
+// Bones pointed in given directions (her own frame: x left, y up, z forward), for poses that aren't in a clip
+// (a hug). Bone order as in the clips: L thigh, L shin, R thigh, R shin, L upper arm, L forearm, R upper arm, R
+// forearm. use[i] false: that bone is left as it is. Adds to `out` (it isn't cleared)
+void CompRig_SolveDirs(SkelAnime* skel, const CompRigMap* map, const float dirs[8][3], const bool use[8], float amount,
+                       CompRigOut* out);
+
+// One arm (left: true) reaching for a point in her model's frame (a hand to hold), the elbow a little bent. Adds to
+// `out`
+void CompRig_Reach(SkelAnime* skel, const CompRigMap* map, bool left, float tx, float ty, float tz, float amount,
+                   CompRigOut* out);
+
 // Her leg length in her model's units (hip to ankle), for step rates and the hips' bob
 float CompRig_LegLength(SkelAnime* skel, const CompRigMap* map);

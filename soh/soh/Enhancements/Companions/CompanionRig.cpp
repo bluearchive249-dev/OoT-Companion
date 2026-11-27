@@ -243,6 +243,100 @@ float CompRig_LegLength(SkelAnime* skel, const CompRigMap* map) {
     return Len(Sub(p.pos[b], p.pos[a])) + Len(Sub(p.pos[c], p.pos[b]));
 }
 
+namespace {
+
+// Turns the bones whose direction `want` gives (returns false to leave one), hips outward, onto her pose
+template <typename F> void SolveBones(Pose& p, const CompRigMap* map, F want, float amount, CompRigOut* out) {
+    const int bones[8][2] = { { map->lThigh, map->lShin }, { map->lShin, map->lFoot },  { map->rThigh, map->rShin },
+                              { map->rShin, map->rFoot },  { map->lUpper, map->lFore }, { map->lFore, map->lHand },
+                              { map->rUpper, map->rFore }, { map->rFore, map->rHand } };
+    for (int k = 0; k < 8; k++) {
+        int a = bones[k][0] - 1, b = bones[k][1] - 1;
+        if ((a < 0) || (b < 0) || (a >= p.count) || (b >= p.count) || (a + 1 >= 32)) {
+            continue;
+        }
+        V3 now = Sub(p.pos[b], p.pos[a]);
+        V3 dir;
+        if ((Len(now) < 1.0f) || !want(k, p, a, dir)) {
+            continue;
+        }
+        M3 q = Turn(now, dir, amount);
+        M3 newRot = Mul(q, p.rot[a]);
+        int par = p.parent[a];
+        p.local[a] = (par < 0) ? newRot : Mul(Transpose(p.rot[par]), newRot);
+        Forward(&p);
+        Vec3s r = ToRot(p.local[a]);
+        out->rot[a + 1][0] = r.x;
+        out->rot[a + 1][1] = r.y;
+        out->rot[a + 1][2] = r.z;
+        out->mask |= 1u << (a + 1);
+    }
+}
+
+// Her pose with what `out` already holds put on it
+bool BuildWith(SkelAnime* skel, const CompRigOut* out, Pose* p) {
+    if (!Build(skel, p)) {
+        return false;
+    }
+    for (int i = 0; i < p->count; i++) {
+        if ((i + 1 < 32) && (out->mask & (1u << (i + 1)))) {
+            Vec3s r;
+            r.x = out->rot[i + 1][0];
+            r.y = out->rot[i + 1][1];
+            r.z = out->rot[i + 1][2];
+            p->local[i] = FromRot(r);
+        }
+    }
+    Forward(p);
+    return true;
+}
+
+} // namespace
+
+void CompRig_SolveDirs(SkelAnime* skel, const CompRigMap* map, const float dirs[8][3], const bool use[8], float amount,
+                       CompRigOut* out) {
+    Pose p;
+    if ((amount <= 0.0f) || !BuildWith(skel, out, &p)) {
+        return;
+    }
+    SolveBones(
+        p, map,
+        [&](int k, Pose&, int, V3& d) {
+            if (!use[k]) {
+                return false;
+            }
+            d = Norm(V3{ dirs[k][0], dirs[k][1], dirs[k][2] });
+            return true;
+        },
+        amount, out);
+}
+
+void CompRig_Reach(SkelAnime* skel, const CompRigMap* map, bool left, float tx, float ty, float tz, float amount,
+                   CompRigOut* out) {
+    Pose p;
+    if ((amount <= 0.0f) || !BuildWith(skel, out, &p)) {
+        return;
+    }
+    V3 target = { tx, ty, tz };
+    SolveBones(
+        p, map,
+        [&](int k, Pose& pp, int a, V3& d) {
+            if (k != (left ? 4 : 6) && k != (left ? 5 : 7)) {
+                return false;
+            }
+            V3 to = Norm(Sub(target, pp.pos[a]));
+            if (k == (left ? 4 : 6)) {
+                // (the upper arm a little out and down from the straight line, so the elbow bends)
+                V3 side = { left ? 0.25f : -0.25f, -0.15f, 0.0f };
+                d = Norm(Add(to, side));
+            } else {
+                d = to;
+            }
+            return true;
+        },
+        amount, out);
+}
+
 void CompRig_Solve(SkelAnime* skel, const CompRigMap* map, const CompClipMix* mix, float amount, CompRigOut* out) {
     out->mask = 0;
     out->rootDY = 0.0f;

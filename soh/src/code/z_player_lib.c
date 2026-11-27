@@ -1251,9 +1251,16 @@ void func_8008F87C(PlayState* play, Player* this, SkelAnime* skelAnime, Vec3f* p
     }
 }
 
+// Companions: a hook to pose Link's arms (hugs, holding hands); NULL when unused
+void (*gCompanionPlayerLimbHook)(PlayState* play, s32 limbIndex, Vec3f* pos, Vec3s* rot, Player* player) = NULL;
+
 s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
                                           void* thisx) {
     Player* this = (Player*)thisx;
+
+    if (gCompanionPlayerLimbHook != NULL) {
+        gCompanionPlayerLimbHook(play, limbIndex, pos, rot, this);
+    }
 
     if (CVarGetInteger(CVAR_ENHANCEMENT("EquipmentAlwaysVisible"), 0) &&
         CVarGetInteger(CVAR_ENHANCEMENT("ScaleAdultEquipmentAsChild"), 0) && LINK_IS_CHILD) {
