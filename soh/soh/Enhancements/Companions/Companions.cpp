@@ -1294,6 +1294,12 @@ typedef struct {
     Actor* carry;      // a drop she's bringing to Link
     f32 carryGravity;  // (its own, given back when she puts it down)
     u8 fetches;        // drops brought from this pot
+    // Through a door after Link: to the door on her side, then through it
+    u8 doorGo;
+    Vec3f doorNear, doorFar;
+    s16 doorTimer;
+    f32 doorBest;
+    u16 doorSfx;
 } Comp;
 
 static s16 sHugWho = -1;
@@ -3657,6 +3663,127 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
     }
 }
 
+// ---- Doors ----
+// Link goes through a door into another room: those left on the other side walk to the door, open it and come
+// through after him (rather than being shut in, or waiting to be warped)
+static Vec3f sLinkTrail[30];
+static int sLinkTrailAt = 0;
+static s8 sLastRoom = -2;
+
+static void FollowThroughDoor(PlayState* play, Player* player) {
+    sLinkTrail[sLinkTrailAt] = player->actor.world.pos;
+    sLinkTrailAt = (sLinkTrailAt + 1) % (int)ARRAY_COUNT(sLinkTrail);
+    s8 room = play->roomCtx.curRoom.num;
+    if (room == sLastRoom) {
+        return;
+    }
+    bool first = (sLastRoom == -2);
+    sLastRoom = room;
+    if (first) {
+        return;
+    }
+    // The door he went through: the nearest one (or room boundary)
+    Actor* door = nullptr;
+    f32 best = Tune("door_search", 220.0f);
+    for (Actor* a = play->actorCtx.actorLists[ACTORCAT_DOOR].head; a != nullptr; a = a->next) {
+        f32 d = Actor_WorldDistXZToActor(&player->actor, a);
+        if (d < best) {
+            best = d;
+            door = a;
+        }
+    }
+    if (door == nullptr) {
+        return;
+    }
+    // Which way he went: across the door's face, from where he was a moment ago
+    Vec3f was = sLinkTrail[sLinkTrailAt]; // (the oldest in the trail, about a second ago)
+    f32 nx = Math_SinS(door->shape.rot.y), nz = Math_CosS(door->shape.rot.y);
+    f32 side = (door->world.pos.x - was.x) * nx + (door->world.pos.z - was.z) * nz;
+    if (fabsf(side) < 1.0f) {
+        side = (player->actor.world.pos.x - door->world.pos.x) * nx + (player->actor.world.pos.z - door->world.pos.z) * nz;
+    }
+    if (side < 0.0f) {
+        nx = -nx;
+        nz = -nz;
+    }
+    u16 sfx = (door->id == ACTOR_EN_DOOR) ? NA_SE_OC_DOOR_OPEN
+              : (door->id == ACTOR_EN_HOLL) ? 0
+                                            : NA_SE_EV_SLIDE_DOOR_OPEN;
+    for (int i = 0; i < COMP_COUNT; i++) {
+        Comp* c = sComp[i];
+        if ((c == nullptr) || (c->state == ST_KO)) {
+            continue;
+        }
+        // (only those still on the side he came from)
+        f32 hers = (c->actor.world.pos.x - door->world.pos.x) * nx + (c->actor.world.pos.z - door->world.pos.z) * nz;
+        if (hers > 5.0f) {
+            continue;
+        }
+        if ((c->state == ST_EXPLORE) || (c->state == ST_REST) || (c->state == ST_EMOTE) || (c->state == ST_IDLE)) {
+            c->state = ST_FOLLOW;
+        }
+        f32 across = (f32)(c->formation - 1) * Tune("door_spread", 14.0f);
+        c->doorGo = 1;
+        c->doorTimer = 0;
+        c->doorBest = 1e9f;
+        c->doorSfx = sfx;
+        c->doorNear = door->world.pos;
+        c->doorNear.x -= nx * Tune("door_near", 35.0f);
+        c->doorNear.z -= nz * Tune("door_near", 35.0f);
+        c->doorFar = door->world.pos;
+        c->doorFar.x += nx * Tune("door_far", 50.0f) + nz * across;
+        c->doorFar.z += nz * Tune("door_far", 50.0f) - nx * across;
+        c->doorFar.y = player->actor.world.pos.y;
+        c->catchingUp = 0;
+        c->wandering = 0;
+    }
+}
+
+// Her part: true while she's on her way to (and through) the door
+static bool DoorWalk(PlayState* play, Comp* c, Player* player) {
+    if (!c->doorGo) {
+        return false;
+    }
+    if (c->state != ST_FOLLOW) {
+        c->doorGo = 0;
+        return false;
+    }
+    const PersonaDef& d = Def(c);
+    c->doorTimer++;
+    f32 dist = Math_Vec3f_DistXZ(&c->actor.world.pos, &c->doorNear);
+    if (dist < c->doorBest - 2.0f) {
+        c->doorBest = dist;
+    }
+    // At the door (or as near as she gets): she opens it and comes through
+    bool stalled = (c->doorTimer > 40) && (dist > c->doorBest - 1.0f) && (c->doorTimer % 40 == 0);
+    if ((dist < Tune("door_reach", 22.0f)) || stalled || (c->doorTimer > (s16)(Tune("door_max_seconds", 6.0f) * COMP_FPS))) {
+        c->doorGo = 0;
+        c->actor.world.pos = c->doorFar;
+        c->actor.prevPos = c->doorFar;
+        c->actor.velocity.y = 0.0f;
+        c->actor.speedXZ = 0.0f;
+        c->actor.shape.rot.y = c->actor.world.rot.y = Math_Vec3f_Yaw(&c->doorFar, &player->actor.world.pos);
+        if (c->doorSfx != 0) {
+            Audio_PlayActorSound2(&c->actor, c->doorSfx);
+        }
+        c->bestDist = 0.0f;
+        c->noProgress = 0;
+        return true;
+    }
+    s16 yaw = Math_Vec3f_Yaw(&c->actor.world.pos, &c->doorNear);
+    c->actor.world.rot.y = yaw;
+    Math_SmoothStepToS(&c->actor.shape.rot.y, yaw, 3, 0x1800, 0x100);
+    f32 speed = std::max(Tune("walk_speed", 2.5f) * 1.6f, Tune("run_speed", 6.0f) * 0.8f);
+    Math_ApproachF(&c->actor.speedXZ, (dist > 60.0f) ? speed : Tune("walk_speed", 2.5f) * 1.4f, 0.5f, 1.0f);
+    bool mixWalk = MixamoOn() && (c->rigState == 1) && (c->rig.lThigh != 0);
+    if ((d.move != nullptr) && !mixWalk && !(c->linkWalk && CVarGetInteger(COMP_CVAR("LinkWalk"), 1))) {
+        SetAnim(c, d.move, std::max(0.6f, c->actor.speedXZ * d.moveAnimSpeed), ANIMMODE_LOOP, -5.0f);
+    } else {
+        SetAnim(c, d.idle, 1.0f, ANIMMODE_LOOP, -6.0f);
+    }
+    return true;
+}
+
 static void Comp_Update(Actor* thisx, PlayState* play) {
     Comp* c = (Comp*)thisx;
     Player* player = GET_PLAYER(play);
@@ -3822,6 +3949,9 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
             UpdateExplore(play, c, player);
             break;
         default:
+            if (DoorWalk(play, c, player)) {
+                break;
+            }
             if (!ThinkFight(play, c, player)) {
                 Follow(play, c, player);
             }
@@ -4250,6 +4380,7 @@ static void Spawn(PlayState* play, int who) {
                            player->actor.world.pos.z, 0, player->actor.shape.rot.y, 0, params);
     if (a != nullptr) {
         Comp* c = (Comp*)a;
+        a->room = -1; // (she goes from room to room with Link, not left behind with the room)
         int n = 0;
         for (int i = 0; i < who; i++) {
             if (WhoOn(i)) {
@@ -4713,6 +4844,7 @@ static void OnFrame() {
     }
     UpdateSong(play, player);
     UpdateMoods(play, player);
+    FollowThroughDoor(play, player);
     // Everyone who's on, at Link's side
     for (int i = 0; i < COMP_COUNT; i++) {
         if (WhoOn(i) && (sComp[i] == nullptr)) {
@@ -4900,6 +5032,7 @@ static void OnSceneInit(int16_t sceneNum) {
     sSong.performer = -1;
     sSong.music = false;
     sPoiSeenCount = 0;
+    sLastRoom = -2;
     SaveMemory();
     for (int i = 0; i < COMP_COUNT; i++) {
         sMood[i].boredom *= 0.5f; // (somewhere new)
