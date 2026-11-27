@@ -1523,8 +1523,9 @@ static bool LinkBusy(PlayState* play, Player* player) {
     }
     // Only real cutscenes: talking (to them or anyone), opening chests, playing the ocarina and the like keep them
     // in view
+    // (the game also marks talking, item gets and doors as "in a cutscene" on Link: those don't count)
     return (play->csCtx.state != CS_STATE_IDLE) ||
-           (player->stateFlags1 & (PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING | PLAYER_STATE1_DEAD)) ||
+           (player->stateFlags1 & (PLAYER_STATE1_LOADING | PLAYER_STATE1_DEAD)) ||
            (play->transitionTrigger != TRANS_TRIGGER_OFF);
 }
 
