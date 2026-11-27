@@ -34,6 +34,8 @@
 #include "soh/ShipInit.hpp"
 #include "soh/frame_interpolation.h"
 #include "CompanionTuning.h"
+#include "CompanionRig.h"
+#include "CompanionClips.h"
 #include "Companions.h"
 
 extern "C" {
@@ -393,6 +395,19 @@ static const u8 sWalkMap[P_COUNT][10] = {
     { 3, 4, 5, 6, 7, 8, 12, 13, 15, 16 }, // adult Malon
     { 0, 0, 0, 0, 0, 0, 11, 12, 14, 15 }, // young Zelda (unnamed limbs: arms guessed, the dress hides her legs)
     { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },     // adult Zelda (she has her own run)
+};
+
+// The bones Mixamo motion turns (limb numbers from the asset lists): L thigh, shin, foot; R thigh, shin, foot; L upper
+// arm, forearm, hand; R upper arm, forearm, hand. Zelda's limbs have no names: hers are found from her skeleton's
+// shape when she appears. Live: "companion.<persona>.rig" (12 numbers)
+static const CompRigMap sRigMap[P_COUNT] = {
+    { 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15 }, // Saria
+    { 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14 },  // young Ruto
+    { 2, 3, 4, 6, 7, 8, 11, 14, 15, 16, 19, 20 }, // adult Ruto
+    { 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14 },  // young Malon
+    { 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 16, 17 }, // adult Malon
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },       // young Zelda (found from her shape)
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },       // adult Zelda (found from her shape)
 };
 
 // Her side of a hug: arms out, or the closest the game has
@@ -985,6 +1000,14 @@ typedef struct {
     f32 walkAmount;
     u8 talkStage;
     u8 restFrames;
+    // Mixamo motion on her own skeleton
+    CompRigMap rig;
+    u8 rigState; // 0 not looked at yet, 1 ready, 2 none
+    f32 legLen;  // in her model's units
+    f32 mixPhase, mixAmount;
+    s16 bowClip;
+    f32 bowFrame;
+    CompRigOut rigOut;
 } Comp;
 
 static s16 sHugWho = -1;
@@ -1209,6 +1232,10 @@ static void FireArrow(PlayState* play, Comp* c, s16 type) {
     if ((c->target == nullptr) || !ActorExists(play, c->target)) {
         return;
     }
+    if ((c->bowClip >= 0) && (type != ARROW_NUT)) {
+        c->bowClip = CLIP_BOW_RECOIL;
+        c->bowFrame = 0.0f;
+    }
     Vec3f from = HandPos(c);
     Vec3f to = AimPos(c->target);
     s16 yaw = Math_Vec3f_Yaw(&from, &to);
@@ -1431,6 +1458,7 @@ static void Comp_Init(Actor* thisx, PlayState* play) {
         c->rest.playSpeed = 0.0f;
         c->puppetAnim = LINK_WALK;
     }
+    c->bowClip = -1;
     sComp[c->who] = c;
 }
 
@@ -1507,6 +1535,8 @@ static void StartAttack(PlayState* play, Comp* c, s16 move) {
             c->timer = 12;
             c->cdRanged = (s16)Tune("seed_cooldown", 45.0f);
             SetAnim(c, d.cast, 1.5f, ANIMMODE_ONCE, -4.0f);
+            c->bowClip = CLIP_BOW_DRAW;
+            c->bowFrame = 0.0f;
             break;
         case MOVE_ICE:
         case MOVE_LIGHT:
@@ -1514,6 +1544,8 @@ static void StartAttack(PlayState* play, Comp* c, s16 move) {
             c->timer = 18;
             c->cdRanged = (s16)Tune((move == MOVE_LIGHT) ? "light_cooldown" : "ice_cooldown", 80.0f);
             SetAnim(c, d.cast, 1.0f, ANIMMODE_ONCE, -4.0f);
+            c->bowClip = CLIP_BOW_DRAW;
+            c->bowFrame = 0.0f;
             break;
         case MOVE_CUCCO:
             c->shotsLeft = 1;
@@ -1551,8 +1583,13 @@ static void UpdateAttack(PlayState* play, Comp* c) {
         c->target = nullptr;
     }
     if (c->target != nullptr) {
-        Math_SmoothStepToS(&c->actor.shape.rot.y, Actor_WorldYawTowardActor(&c->actor, c->target), 3, 0x1800, 0x100);
-        c->actor.world.rot.y = c->actor.shape.rot.y;
+        // (with a bow she stands side-on, her bow arm toward it)
+        s16 face = Actor_WorldYawTowardActor(&c->actor, c->target);
+        if (c->bowClip >= 0) {
+            face = (s16)(face - (s16)(Tune("bow_turn", 70.0f) * (65536.0f / 360.0f)));
+        }
+        Math_SmoothStepToS(&c->actor.shape.rot.y, face, 3, 0x1800, 0x100);
+        c->actor.world.rot.y = Actor_WorldYawTowardActor(&c->actor, c->target);
     }
     if (c->move == MOVE_SPLASH) {
         // Run in, then slam the water down
@@ -1655,6 +1692,8 @@ static bool ThinkFight(PlayState* play, Comp* c, Player* player) {
     }
     return false;
 }
+
+static bool MixamoOn();
 
 // ---- Holding hands ----
 
@@ -1874,7 +1913,8 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
     if (c->swimming) {
         SetAnim(c, d.swim, 1.0f, ANIMMODE_LOOP, -6.0f);
     } else if (c->actor.speedXZ > 0.8f) {
-        if ((d.move != nullptr) && !(c->linkWalk && CVarGetInteger(COMP_CVAR("LinkWalk"), 1))) {
+        if ((d.move != nullptr) && !(c->linkWalk && CVarGetInteger(COMP_CVAR("LinkWalk"), 1)) &&
+            !(MixamoOn() && (c->rigState == 1) && (c->rig.lThigh != 0))) {
             SetAnim(c, d.move, std::max(0.6f, c->actor.speedXZ * d.moveAnimSpeed), ANIMMODE_LOOP, -5.0f);
         } else {
             SetAnim(c, d.idle, 1.0f, ANIMMODE_LOOP, -6.0f);
@@ -1992,6 +2032,118 @@ static void UpdateFace(Comp* c) {
     }
 }
 
+// ---- Mixamo motion ----
+
+static bool MixamoOn() {
+    return CVarGetInteger(COMP_CVAR("Mixamo"), 1) != 0;
+}
+
+static void UpdateRig(PlayState* play, Comp* c, Player* player) {
+    c->rigOut.mask = 0;
+    c->rigOut.rootDY = 0.0f;
+    if (!MixamoOn() || (c->rigState == 2)) {
+        return;
+    }
+    if (c->rigState == 0) {
+        // Her bones: from the list, or from her shape
+        c->rig = sRigMap[c->persona];
+        if (c->rig.lThigh == 0 && c->rig.lUpper == 0) {
+            CompRig_AutoMap(&c->skel, &c->rig);
+        }
+        c->rigState = 1;
+    }
+    // (live changes: "companion.<persona>.rig")
+    std::string k = std::string("companion.") + sPersonaKey[c->persona] + ".rig";
+    uint8_t* m = &c->rig.lThigh;
+    const uint8_t* def = &sRigMap[c->persona].lThigh;
+    CompRigMap found = c->rig;
+    for (int i = 0; i < 12; i++) {
+        m[i] = (uint8_t)CompTuneAt(k.c_str(), i, (def[i] != 0) ? def[i] : (&found.lThigh)[i]);
+    }
+    if (c->legLen <= 0.0f) {
+        c->legLen = CompRig_LegLength(&c->skel, &c->rig);
+        if (c->legLen <= 0.0f) {
+            c->legLen = 2200.0f; // (no legs found: about a child's)
+        }
+    }
+
+    CompClipMix mix = {};
+    f32 rate = Tune("mixamo_rate", 1.5f); // (clips are 30 frames a second, the game 20)
+
+    // A bow (Saria's slingshot, adult Ruto's and Zelda's arrows): drawn, held, and the recoil after the shot
+    if (c->bowClip >= 0) {
+        const CompClip& bc = sClips[c->bowClip];
+        c->bowFrame += rate * Tune("bow_rate", 1.2f);
+        if (c->bowFrame >= (f32)(bc.frames - 1)) {
+            if (c->bowClip == CLIP_BOW_RECOIL) {
+                c->bowClip = (c->state == ST_ATTACK) && (c->shotsLeft > 0) ? CLIP_BOW_DRAW : -1;
+                c->bowFrame = 0.0f;
+            } else {
+                c->bowFrame = (f32)(bc.frames - 1); // (held drawn)
+            }
+        }
+        if (c->state != ST_ATTACK && c->bowClip == CLIP_BOW_DRAW) {
+            c->bowClip = -1;
+        }
+    }
+    if (c->bowClip >= 0) {
+        mix.clip[0] = c->bowClip;
+        mix.frame[0] = c->bowFrame;
+        mix.weight[0] = 1.0f;
+        mix.count = 1;
+        Math_ApproachF(&c->mixAmount, 1.0f, 0.5f, 0.25f);
+    } else {
+        // Walking and running (and side steps hand in hand)
+        f32 speed = ((c->holdSide != 0) && (c->holdWalk >= 0.0f)) ? c->holdWalk : fabsf(c->actor.speedXZ);
+        bool moving = !c->swimming && (c->state != ST_KO) && (c->state != ST_HUG) && (speed > 0.8f) &&
+                      (c->actor.bgCheckFlags & BGCHECKFLAG_GROUND);
+        Math_ApproachF(&c->mixAmount, moving ? 1.0f : 0.0f, 0.35f, 0.12f);
+        if (c->mixAmount <= 0.0f) {
+            c->mixPhase = 0.0f;
+            return;
+        }
+        f32 legWorld = c->legLen * c->actor.scale.y;
+        f32 run = CLAMP((speed - Tune("run_from", 3.5f)) / Tune("run_blend", 1.5f), 0.0f, 1.0f);
+        // Side steps: moving across where she faces
+        s16 moveYaw = (c->holdSide != 0) ? player->actor.world.rot.y : c->actor.world.rot.y;
+        f32 across = Math_SinS((s16)(moveYaw - c->actor.shape.rot.y));
+        f32 ahead = Math_CosS((s16)(moveYaw - c->actor.shape.rot.y));
+        f32 side = CLAMP((fabsf(across) - 0.55f) / 0.3f, 0.0f, 1.0f) * (1.0f - run);
+        int sideClip = (across > 0.0f) ? CLIP_STRAFE_LEFT : CLIP_STRAFE_RIGHT;
+        f32 wWalk = (1.0f - run) * (1.0f - side), wRun = run, wSide = side;
+        // One shared step: how much of a stride she covers this frame
+        f32 legsPerSecond = sClips[CLIP_WALK].legsPerSecond * wWalk + sClips[CLIP_RUN].legsPerSecond * wRun +
+                            sClips[sideClip].legsPerSecond * wSide;
+        f32 cycleFrames = (f32)sClips[CLIP_WALK].frames * wWalk + (f32)sClips[CLIP_RUN].frames * wRun +
+                          (f32)sClips[sideClip].frames * wSide;
+        if ((legsPerSecond > 0.01f) && (legWorld > 0.01f) && (cycleFrames > 0.0f)) {
+            // clip frames this game frame = (legs moved) / (legs per clip frame)
+            f32 frames = (speed / legWorld) / (legsPerSecond / 30.0f) * Tune("stride_scale", 1.0f);
+            c->mixPhase += CLAMP(frames, 0.2f, 4.0f) / cycleFrames;
+            c->mixPhase -= floorf(c->mixPhase);
+        }
+        if (ahead < -0.3f && side < 0.5f) {
+            // (backing up: the walk played backwards)
+            c->mixPhase -= 2.0f * CLAMP((speed / legWorld) / (legsPerSecond / 30.0f), 0.2f, 4.0f) / cycleFrames;
+            c->mixPhase -= floorf(c->mixPhase);
+        }
+        int n = 0;
+        if (wWalk > 0.001f) {
+            mix.clip[n] = CLIP_WALK, mix.frame[n] = c->mixPhase * (f32)sClips[CLIP_WALK].frames,
+            mix.weight[n++] = wWalk;
+        }
+        if (wRun > 0.001f) {
+            mix.clip[n] = CLIP_RUN, mix.frame[n] = c->mixPhase * (f32)sClips[CLIP_RUN].frames, mix.weight[n++] = wRun;
+        }
+        if (wSide > 0.001f) {
+            mix.clip[n] = sideClip, mix.frame[n] = c->mixPhase * (f32)sClips[sideClip].frames, mix.weight[n++] = wSide;
+        }
+        mix.count = n;
+    }
+    CompRig_Solve(&c->skel, &c->rig, &mix, c->mixAmount * Tune("mixamo_mix", 1.0f), &c->rigOut);
+    c->rigOut.rootDY *= Tune("mixamo_bob", 1.0f);
+}
+
 static void Comp_Update(Actor* thisx, PlayState* play) {
     Comp* c = (Comp*)thisx;
     Player* player = GET_PLAYER(play);
@@ -2027,6 +2179,7 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
     }
     SkelAnime_Update(&c->skel);
     UpdateFace(c);
+    UpdateRig(play, c, player);
 
     // Hit by an enemy
     if (c->body.base.acFlags & AC_HIT) {
@@ -2153,7 +2306,7 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
     }
 
     // Link's walk: his hidden skeleton walks or runs at her speed
-    if (c->linkWalk) {
+    if (c->linkWalk && !MixamoOn()) {
         // (hand in hand she walks at his pace)
         f32 moveSpeed = ((c->holdSide != 0) && (c->holdWalk >= 0.0f)) ? c->holdWalk : fabsf(c->actor.speedXZ);
         bool walking = CVarGetInteger(COMP_CVAR("LinkWalk"), 1) && !c->swimming && (c->state != ST_KO) &&
@@ -2222,8 +2375,17 @@ static s32 Comp_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Ve
     if ((c->persona == P_SARIA) && (limbIndex == 15) && (c->anim == d.support)) {
         *dList = (Gfx*)OTR("object_sa", "gSariaRightHandAndOcarinaDL");
     }
-    // Link's walk: how far his joint has turned from standing, added to hers
-    if (c->linkWalk && (c->walkAmount > 0.01f) && (c->restFrames >= 3)) {
+    // Mixamo motion: her bones turned to the clip's
+    if ((limbIndex < 32) && (c->rigOut.mask & (1u << limbIndex))) {
+        rot->x = c->rigOut.rot[limbIndex][0];
+        rot->y = c->rigOut.rot[limbIndex][1];
+        rot->z = c->rigOut.rot[limbIndex][2];
+    }
+    if ((limbIndex == 1) && (c->rigOut.mask != 0)) {
+        pos->y += c->rigOut.rootDY;
+    }
+    // Link's walk: how far his joint has turned from standing, added to hers (when Mixamo motion is off)
+    if (!MixamoOn() && c->linkWalk && (c->walkAmount > 0.01f) && (c->restFrames >= 3)) {
         std::string k = std::string("companion.") + sPersonaKey[c->persona];
         f32 mix = Tune("walk_mix", 1.0f) * c->walkAmount;
         if (limbIndex == 1) {

@@ -1915,14 +1915,22 @@ void SohMenu::AddMenuEnhancements() {
             info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
         })
         .Options(CheckboxOptions().DefaultValue(true).Tooltip("Whether Zelda comes along."));
+    AddWidget(path, "Mixamo Motion", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Companions.Mixamo"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "They walk, run and side-step with motion from Mixamo clips, fitted to each girl's own bones in the "
+            "game, and draw and shoot with a bow (Saria's slingshot, adult Ruto's and Zelda's arrows)."));
     AddWidget(path, "Link's Walk", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("Companions.LinkWalk"))
         .PreFunc([](WidgetInfo& info) {
             info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
         })
         .Options(CheckboxOptions().DefaultValue(true).Tooltip(
-            "They walk and run with Link's own walk and run, put on their skeletons (adult Zelda keeps her own "
-            "run). Off: their own animations, and a glide for those the game never gave a walk."));
+            "When Mixamo Motion is off: they walk and run with Link's own walk and run, put on their skeletons "
+            "(adult Zelda keeps her own run). Both off: their own animations."));
     AddWidget(path, "Companions Fight", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("Companions.Fight"))
         .PreFunc([](WidgetInfo& info) {
