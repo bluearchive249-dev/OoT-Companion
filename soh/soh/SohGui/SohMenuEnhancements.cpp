@@ -2104,6 +2104,64 @@ void SohMenu::AddMenuEnhancements() {
     AddWidget(path, "Shadow Tag Mode", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("ShadowTag"))
         .Options(CheckboxOptions().Tooltip("A Wallmaster follows Link everywhere, don't get caught!"));
+    // Companions: Saria, Ruto, Malon and Zelda travel with Link (Companions.cpp)
+    AddWidget(path, "Companions", WIDGET_SEPARATOR_TEXT);
+    AddWidget(path, "Travel with Companions", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Companions.Enabled"))
+        .Options(CheckboxOptions().Tooltip(
+            "Saria, Ruto, Malon and Zelda travel with Link. They follow him, fight the enemies near him, react to "
+            "what happens and talk: speech bubbles over their heads, chats between them, and tips about the small "
+            "keys in a dungeon (from the randomizer's placement on a randomizer file).\n\n"
+            "Ruto, Malon and Zelda are young with child Link and grown up with adult Link.\n\n"
+            " - Saria: slingshot seeds, a Deku Nut flash up close, Saria's Song heals Link.\n"
+            " - Ruto: a running water splash (adult: ice arrows too). She swims; the others wait on the shore.\n"
+            " - Malon: sends angry cuccos at enemies, Lon Lon Milk heals Link.\n"
+            " - Zelda: a Sheikah nut flash (adult: Light Arrows), her lullaby / Nayru's Love keeps Link from harm.\n\n"
+            "Z-target one of them and press A to talk. Lines can be added in companion_lines.json in the game's "
+            "folder."));
+    AddWidget(path, "Saria", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Companions.Saria"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip("Whether Saria comes along."));
+    AddWidget(path, "Ruto", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Companions.Ruto"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip("Whether Ruto comes along."));
+    AddWidget(path, "Malon", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Companions.Malon"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip("Whether Malon comes along."));
+    AddWidget(path, "Zelda", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Companions.Zelda"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip("Whether Zelda comes along."));
+    AddWidget(path, "Companions Fight", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Companions.Fight"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip("They attack the enemies near Link, and help him "
+                                                             "when he's badly hurt."));
+    AddWidget(path, "Companions Talk", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Companions.Chatter"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip("Speech bubbles, chats and key tips."));
+    AddWidget(path, "Bubble Size: %.1fx", WIDGET_CVAR_SLIDER_FLOAT)
+        .CVar(CVAR_ENHANCEMENT("Companions.BubbleScale"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(FloatSliderOptions().Min(0.5f).Max(2.0f).DefaultValue(1.0f).Format("%.1fx"));
     // Everything for the Play as Ganondorf mod, in its own column
     path.column = SECTION_COLUMN_2;
     AddWidget(path, "Ganondorf", WIDGET_SEPARATOR_TEXT);
