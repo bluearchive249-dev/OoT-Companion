@@ -930,6 +930,9 @@ typedef struct {
     s16 eye, blinkTimer, mouth, mouthTimer, eyeOverride;
     s16 hp;
     s16 stillTimer, stuckTimer, waitSaid;
+    u8 catchingUp, wandering;
+    s16 wanderTimer;
+    Vec3f wanderGoal;
     f32 legPhase;
     f32 legAmount;
     Actor* target;
@@ -1602,12 +1605,49 @@ static bool ThinkFight(PlayState* play, Comp* c, Player* player) {
     return false;
 }
 
+// How far from Link she lets herself be before she goes to him (each a little different)
+static f32 Leash(Comp* c) {
+    return Tune("leash", 230.0f) + (f32)c->formation * Tune("leash_step", 30.0f);
+}
+
+// A spot near her to stroll to: on solid ground, near her own height, not too far from Link, and dry unless she swims
+static bool PickWanderSpot(PlayState* play, Comp* c, Player* player) {
+    for (int tries = 0; tries < 4; tries++) {
+        s16 yaw = (s16)(Rand_ZeroOne() * 65535.0f);
+        f32 r = Tune("wander_radius", 90.0f) * (0.4f + Rand_ZeroOne() * 0.6f);
+        Vec3f p = c->actor.world.pos;
+        p.x += Math_SinS(yaw) * r;
+        p.z += Math_CosS(yaw) * r;
+        Vec3f lp = player->actor.world.pos;
+        if (Math_Vec3f_DistXZ(&p, &lp) > Leash(c) * 0.8f) {
+            continue;
+        }
+        Vec3f top = p;
+        top.y += 50.0f;
+        CollisionPoly* poly;
+        s32 bgId;
+        f32 floorY = BgCheck_EntityRaycastFloor3(&play->colCtx, &poly, &bgId, &top);
+        if ((floorY <= BGCHECK_Y_MIN) || (fabsf(floorY - c->actor.world.pos.y) > 30.0f)) {
+            continue;
+        }
+        f32 waterY;
+        WaterBox* wb;
+        if ((Def(c).swim == nullptr) && WaterBox_GetSurface1(play, &play->colCtx, p.x, p.z, &waterY, &wb) &&
+            (waterY > floorY + 15.0f)) {
+            continue;
+        }
+        c->wanderGoal = p;
+        return true;
+    }
+    return false;
+}
+
 static void Follow(PlayState* play, Comp* c, Player* player) {
     const PersonaDef& d = Def(c);
-    Vec3f goal = SlotPos(c, player);
-    f32 dist = Math_Vec3f_DistXZ(&c->actor.world.pos, &goal);
     f32 toLink = Actor_WorldDistXZToActor(&c->actor, &player->actor);
     bool waitAtShore = LinkSwimming(player) && (d.swim == nullptr);
+    f32 leash = Leash(c);
+    f32 near = Tune("catch_up_distance", 80.0f) + (f32)c->formation * 18.0f;
 
     c->swimming = (d.swim != nullptr) && (c->actor.bgCheckFlags & BGCHECKFLAG_WATER) && (c->actor.yDistToWater > 30.0f);
 
@@ -1617,7 +1657,6 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
             SayKind(c->who, L_WATER);
             c->waitSaid = 1;
         }
-        dist = 0.0f;
     } else {
         c->waitSaid = 0;
     }
@@ -1628,20 +1667,55 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
         return;
     }
 
+    // She stays where she is while he's near (he can walk right up to her), strolls about a little, and only goes
+    // to him once he's got far: to a spot on her side of him, not behind him
+    if (!waitAtShore && (toLink > leash)) {
+        c->catchingUp = 1;
+        c->wandering = 0;
+    }
+    Vec3f goal = c->actor.world.pos;
+    f32 want = 0.0f;
     f32 runSpeed = Tune("run_speed", 6.5f);
     f32 walkSpeed = Tune("walk_speed", 2.5f);
-    f32 want = 0.0f;
-    if (dist > 140.0f) {
-        want = std::max(runSpeed, player->actor.speedXZ * 1.05f);
-    } else if (dist > 30.0f) {
-        want = std::max(walkSpeed, std::min(player->actor.speedXZ, runSpeed));
+
+    if (c->catchingUp && !waitAtShore) {
+        s16 fromLink = Math_Vec3f_Yaw(&player->actor.world.pos, &c->actor.world.pos);
+        goal = player->actor.world.pos;
+        goal.x += Math_SinS(fromLink) * near;
+        goal.z += Math_CosS(fromLink) * near;
+        if (toLink < near + 25.0f) {
+            c->catchingUp = 0;
+            c->wanderTimer = Rand_S16Offset(40, 80);
+        } else if (toLink > leash * 1.6f) {
+            want = std::max(runSpeed, player->actor.speedXZ * 1.05f);
+        } else {
+            want = std::max(walkSpeed * 1.4f, std::min(player->actor.speedXZ, runSpeed));
+        }
+    } else if (!waitAtShore) {
+        if (c->wandering) {
+            goal = c->wanderGoal;
+            if (Math_Vec3f_DistXZ(&c->actor.world.pos, &goal) < 12.0f) {
+                c->wandering = 0;
+                c->wanderTimer = Rand_S16Offset(50, 120);
+            } else {
+                want = walkSpeed * Tune("wander_speed", 0.7f);
+            }
+        } else if (--c->wanderTimer <= 0) {
+            // Now and then a little walk
+            if ((Rand_ZeroOne() < Tune("wander_chance", 0.6f)) && PickWanderSpot(play, c, player)) {
+                c->wandering = 1;
+            }
+            c->wanderTimer = Rand_S16Offset(60, 120);
+        }
     }
+    f32 dist = Math_Vec3f_DistXZ(&c->actor.world.pos, &goal);
+
     Math_ApproachF(&c->actor.speedXZ, want, 0.5f, 1.2f);
-    if (c->actor.speedXZ > 0.5f) {
+    if ((c->actor.speedXZ > 0.5f) && (dist > 1.0f)) {
         s16 yaw = Math_Vec3f_Yaw(&c->actor.world.pos, &goal);
         Math_SmoothStepToS(&c->actor.world.rot.y, yaw, 3, 0x1800, 0x100);
         c->actor.shape.rot.y = c->actor.world.rot.y;
-    } else if (toLink < 250.0f) {
+    } else if (toLink < 300.0f) {
         // Standing: turned toward him
         Math_SmoothStepToS(&c->actor.shape.rot.y, c->actor.yawTowardsPlayer, 6, 0x600, 0x80);
         c->actor.world.rot.y = c->actor.shape.rot.y;
@@ -1649,16 +1723,19 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
 
     // Stuck behind something while far: she catches up
     f32 moved = Math_Vec3f_DistXZ(&c->actor.world.pos, &c->actor.prevPos);
-    if ((dist > 120.0f) && (moved < 0.5f) && (want > 0.0f)) {
+    if (c->wandering && (moved < 0.3f) && (want > 0.0f) && (c->stuckTimer > 10)) {
+        c->wandering = 0; // (a stroll into a wall: given up)
+    }
+    if ((dist > 60.0f) && (moved < 0.5f) && (want > 0.0f)) {
         c->stuckTimer++;
     } else {
         c->stuckTimer = 0;
     }
-    if (!waitAtShore &&
-        ((toLink > Tune("warp_distance", 650.0f)) || (c->stuckTimer > (s16)Tune("stuck_frames", 40.0f)) ||
-         (c->actor.world.pos.y < player->actor.world.pos.y - 300.0f) ||
-         ((c->actor.world.pos.y > player->actor.world.pos.y + 300.0f) &&
-          (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND)))) {
+    if (!waitAtShore && ((toLink > Tune("warp_distance", 650.0f)) ||
+                         (c->catchingUp && (c->stuckTimer > (s16)Tune("stuck_frames", 40.0f))) ||
+                         (c->actor.world.pos.y < player->actor.world.pos.y - 300.0f) ||
+                         ((c->actor.world.pos.y > player->actor.world.pos.y + 300.0f) &&
+                          (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND)))) {
         if ((player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) || LinkSwimming(player)) {
             WarpToLink(play, c, player);
         }
@@ -1879,7 +1956,7 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
             }
             break;
         case ST_EMOTE:
-            if ((--c->timer <= 0) || (Actor_WorldDistXZToActor(thisx, &player->actor) > 220.0f)) {
+            if ((--c->timer <= 0) || (Actor_WorldDistXZToActor(thisx, &player->actor) > Leash(c))) {
                 c->state = ST_FOLLOW;
                 c->eyeOverride = -1;
             }
@@ -1980,6 +2057,10 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
     }
     Actor_UpdateBgCheckInfo(play, thisx, 26.0f, 14.0f, 40.0f, 0x1D); // (walls, floor, water)
     Actor_SetFocus(thisx, d.height * d.scale * 0.85f);
+    // Feet on the ground: young Ruto's standing animation holds her up off it (companion.<persona>.y_offset, in her
+    // model's units)
+    thisx->shape.yOffset =
+        Tune((std::string(sPersonaKey[c->persona]) + ".y_offset").c_str(), (c->persona == P_RUTO_Y) ? -800.0f : 0.0f);
 
     Collider_UpdateCylinder(thisx, &c->body);
     if (c->state != ST_KO) {
@@ -2094,10 +2175,17 @@ static void OnOpenText(uint16_t* textId, bool* loadFromMessageTable) {
     if ((play == nullptr) || (*textId != COMP_TEXT_ID)) {
         return;
     }
+    // Which of them: the one Link is talking to (the message context only learns it after this text is opened, so
+    // it can still name whoever he talked to before)
     Comp* c = nullptr;
-    for (int i = 0; i < COMP_COUNT; i++) {
-        if ((sComp[i] != nullptr) && (&sComp[i]->actor == play->msgCtx.talkActor)) {
-            c = sComp[i];
+    Player* player = GET_PLAYER(play);
+    Actor* who[3] = { (player != nullptr) ? player->talkActor : nullptr,
+                      (player != nullptr) ? player->focusActor : nullptr, play->msgCtx.talkActor };
+    for (int w = 0; (w < 3) && (c == nullptr); w++) {
+        for (int i = 0; i < COMP_COUNT; i++) {
+            if ((sComp[i] != nullptr) && (who[w] != nullptr) && (&sComp[i]->actor == who[w])) {
+                c = sComp[i];
+            }
         }
     }
     if (c == nullptr) {
