@@ -410,6 +410,10 @@ static const CompRigMap sRigMap[P_COUNT] = {
     { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },       // adult Zelda (found from her shape)
 };
 
+// Skirt limbs (widened as her legs swing so her knees stay inside): adult Malon's dress, young Malon's dress (its
+// middle, which carries the lower part). Live: "companion.<persona>.skirt" [limb, limb]
+static const u8 sSkirt[P_COUNT][2] = { { 0, 0 }, { 0, 0 }, { 0, 0 }, { 17, 0 }, { 10, 0 }, { 0, 0 }, { 0, 0 } };
+
 // Her side of a hug: arms out, or the closest the game has
 static const char* sHugAnim[P_COUNT] = {
     OTR("object_sa", "gSariaHandsOutAnim"),
@@ -1011,6 +1015,10 @@ typedef struct {
     f32 bowFrame;
     CompRigOut rigOut;
     f32 hugAmount;
+    // The skirt: widened (from its waist) as her legs spread, with a little spring so it lags and settles
+    f32 skirtScale, skirtVel;
+    uint32_t skirtMask; // skirt limbs safe to widen (nothing but skirt hangs below them)
+    u8 skirtChecked;
 } Comp;
 
 static s16 sHugWho = -1;
@@ -2164,6 +2172,30 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
     for (int i = 0; i < 12; i++) {
         m[i] = (uint8_t)CompTuneAt(k.c_str(), i, (def[i] != 0) ? def[i] : (&found.lThigh)[i]);
     }
+    if (!c->skirtChecked) {
+        c->skirtChecked = 1;
+        c->skirtMask = 0;
+        for (int i = 0; i < 2; i++) {
+            int limb = (int)CompTuneAt((std::string("companion.") + sPersonaKey[c->persona] + ".skirt").c_str(), i,
+                                       sSkirt[c->persona][i]);
+            if ((limb <= 0) || (limb >= 32)) {
+                continue;
+            }
+            // (only if what hangs below it is skirt too: widening it mustn't widen her body)
+            uint32_t below = CompRig_Descendants(&c->skel, limb);
+            uint32_t allowed = 0;
+            for (int j = 0; j < 2; j++) {
+                int other = sSkirt[c->persona][j];
+                allowed |= (other > 0 && other < 32) ? (1u << other) : 0u;
+            }
+            if (c->persona == P_MALON_Y) {
+                allowed |= 1u << 18; // (young Malon's lower dress hangs from the middle)
+            }
+            if ((below & ~allowed) == 0) {
+                c->skirtMask |= 1u << limb;
+            }
+        }
+    }
     if (c->legLen <= 0.0f) {
         c->legLen = CompRig_LegLength(&c->skel, &c->rig);
         if (c->legLen <= 0.0f) {
@@ -2243,9 +2275,29 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
         }
         mix.count = n;
     }
+    std::string pk = std::string(sPersonaKey[c->persona]);
     if (c->mixAmount > 0.0f) {
-        CompRig_Solve(&c->skel, &c->rig, &mix, c->mixAmount * Tune("mixamo_mix", 1.0f), &c->rigOut);
+        // (Malon's steps a little shorter: her skirt is long)
+        f32 own = Tune((pk + ".mixamo_mix").c_str(), (c->who == COMP_MALON) ? 0.8f : 1.0f);
+        CompRig_Solve(&c->skel, &c->rig, &mix, c->mixAmount * Tune("mixamo_mix", 1.0f) * own, &c->rigOut);
         c->rigOut.rootDY *= Tune("mixamo_bob", 1.0f);
+    }
+    // Her skirt widens as her legs spread (how far apart the thighs point, front to back), springing a little
+    {
+        f32 spread = 0.0f;
+        if ((c->mixAmount > 0.0f) && (mix.count > 0)) {
+            float l[3], r[3];
+            CompRig_ClipBone(&mix, 0, l);
+            CompRig_ClipBone(&mix, 2, r);
+            spread = fabsf(l[2] - r[2]) * c->mixAmount;
+        }
+        f32 target = 1.0f + Tune((pk + ".skirt_flare").c_str(), Tune("skirt_flare", 0.35f)) * spread;
+        f32 k = Tune("skirt_spring", 0.25f), damp = Tune("skirt_damping", 0.6f);
+        if (c->skirtScale <= 0.0f) {
+            c->skirtScale = 1.0f;
+        }
+        c->skirtVel = c->skirtVel * damp + (target - c->skirtScale) * k;
+        c->skirtScale = CLAMP(c->skirtScale + c->skirtVel, 0.9f, 1.6f);
     }
     // A hug: both arms around him
     Math_ApproachF(&c->hugAmount, (c->state == ST_HUG) ? 1.0f : 0.0f, 0.3f, 0.15f);
@@ -2502,6 +2554,13 @@ static s32 Comp_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Ve
     }
     if ((limbIndex == 1) && (c->rigOut.mask != 0)) {
         pos->y += c->rigOut.rootDY;
+    }
+    // The skirt widened from its waist (its own place and turn first, then the scale; nothing else hangs below it)
+    if ((limbIndex < 32) && (c->skirtMask & (1u << limbIndex)) && (fabsf(c->skirtScale - 1.0f) > 0.005f)) {
+        Matrix_TranslateRotateZYX(pos, rot);
+        Matrix_Scale(c->skirtScale, c->skirtScale, c->skirtScale, MTXMODE_APPLY);
+        *pos = { 0.0f, 0.0f, 0.0f };
+        rot->x = rot->y = rot->z = 0;
     }
     // Link's walk: how far his joint has turned from standing, added to hers (when Mixamo motion is off)
     if (!MixamoOn() && c->linkWalk && (c->walkAmount > 0.01f) && (c->restFrames >= 3)) {

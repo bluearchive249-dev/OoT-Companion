@@ -230,6 +230,30 @@ float ClipHips(const CompClipMix* mix) {
 
 } // namespace
 
+uint32_t CompRig_Descendants(SkelAnime* skel, int limbNumber) {
+    Pose p;
+    if (!Build(skel, &p) || (limbNumber < 1) || (limbNumber > p.count)) {
+        return 0;
+    }
+    uint32_t mask = 0;
+    for (int i = 0; i < p.count; i++) {
+        for (int a = p.parent[i]; a >= 0; a = p.parent[a]) {
+            if (a == limbNumber - 1) {
+                mask |= (i + 1 < 32) ? (1u << (i + 1)) : 0u;
+                break;
+            }
+        }
+    }
+    return mask;
+}
+
+void CompRig_ClipBone(const CompClipMix* mix, int bone, float out[3]) {
+    V3 d = (mix->count > 0) ? ClipDir(mix, bone) : V3{ 0.0f, -1.0f, 0.0f };
+    out[0] = d.x;
+    out[1] = d.y;
+    out[2] = d.z;
+}
+
 float CompRig_LegLength(SkelAnime* skel, const CompRigMap* map) {
     Pose p;
     if (!Build(skel, &p) || (map->lThigh == 0) || (map->lShin == 0) || (map->lFoot == 0)) {

@@ -44,5 +44,11 @@ void CompRig_SolveDirs(SkelAnime* skel, const CompRigMap* map, const float dirs[
 void CompRig_Reach(SkelAnime* skel, const CompRigMap* map, bool left, float tx, float ty, float tz, float amount,
                    CompRigOut* out);
 
+// Which limbs hang below a limb (bits by limb number), to know whether scaling it moves anything but itself
+uint32_t CompRig_Descendants(SkelAnime* skel, int limbNumber);
+
+// A clip bone's direction now (her frame), blended over the mix
+void CompRig_ClipBone(const CompClipMix* mix, int bone, float out[3]);
+
 // Her leg length in her model's units (hip to ankle), for step rates and the hips' bob
 float CompRig_LegLength(SkelAnime* skel, const CompRigMap* map);
