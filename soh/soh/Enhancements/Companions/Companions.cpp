@@ -1173,8 +1173,10 @@ static bool Fightable(Actor* e) {
     if ((e->update == nullptr) || (e->draw == nullptr) || (e->colChkInfo.health <= 0)) {
         return false;
     }
+    // Enemies and bosses that can fight (the hostile ones; the altar's Spiritual Stones are in the boss list too),
+    // and Shabom and Beamos, which the game doesn't mark hostile
     if ((e->category == ACTORCAT_ENEMY) || (e->category == ACTORCAT_BOSS)) {
-        return true;
+        return (e->flags & ACTOR_FLAG_HOSTILE) || (e->id == ACTOR_EN_BUBBLE) || (e->id == ACTOR_EN_VM);
     }
     // (a Leever under the sand isn't one to shoot at: only while it's up and hostile)
     return ExtraEnemy(e) && (e->flags & ACTOR_FLAG_HOSTILE);
@@ -1519,7 +1521,9 @@ static bool LinkBusy(PlayState* play, Player* player) {
     if (sHugWho >= 0) {
         return false; // (a hug holds him still; that's not a cutscene)
     }
-    return (play->csCtx.state != CS_STATE_IDLE) || Player_InCsMode(play) ||
+    // Only real cutscenes: talking (to them or anyone), opening chests, playing the ocarina and the like keep them
+    // in view
+    return (play->csCtx.state != CS_STATE_IDLE) ||
            (player->stateFlags1 & (PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING | PLAYER_STATE1_DEAD)) ||
            (play->transitionTrigger != TRANS_TRIGGER_OFF);
 }
@@ -1925,7 +1929,8 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
 }
 
 static void Emote(Comp* c, const char* anim, s16 frames, s16 eye) {
-    if (anim == nullptr) {
+    // (hand in hand she keeps walking with him)
+    if ((anim == nullptr) || (c->holdSide != 0)) {
         return;
     }
     c->state = ST_EMOTE;
@@ -2162,7 +2167,10 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
     }
     if (c->hidden) {
         c->hidden = 0;
-        WarpToLink(play, c, player);
+        // (back at his side only if the cutscene left her far from him)
+        if (Actor_WorldDistXZToActor(thisx, &player->actor) > Leash(c)) {
+            WarpToLink(play, c, player);
+        }
     }
 
     if (c->cdRanged > 0) {
