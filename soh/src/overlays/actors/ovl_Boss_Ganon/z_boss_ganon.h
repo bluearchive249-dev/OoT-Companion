@@ -8,24 +8,6 @@ struct BossGanon;
 
 typedef void (*BossGanonActionFunc)(struct BossGanon*, PlayState*);
 
-// SoH: "Play as Ganondorf". These params spawn Ganondorf and his projectiles in player-controlled mode.
-// Vanilla uses 0/1 for Ganondorf himself and 0x64-0x190 for his projectiles.
-#define GDF_PARAMS_PLAYER 0x10
-#define GDF_PARAMS_PUPPET 0x11 // another player's Ganondorf (Invasion mode), posed from the network
-#define GDF_PARAMS_PUPPET_BALL 0x12 // his light balls and Big Magic on the other players' screens (just for show)
-#define GDF_PARAMS_PLAYER_LIGHT_BALL 0x1F4
-#define GDF_PARAMS_PLAYER_BIG_MAGIC 0x1F5 // 0x1F5 - 0x1F9, one per ball
-#define GDF_PLAYER_BIG_MAGIC_COUNT 5
-
-// Ganondorf's attacks carry every damage type in the game, so they break rocks and walls, hit switches and hurt
-// anything Link could hurt with any weapon. Only "blocked by a shield" is left out: enemies treat that one as a
-// harmless shield push. Which damage-table entry is used is decided in CollisionCheck_ApplyDamage.
-// Every damage type except the shield and the ones that only stun or freeze (Deku Nut, Boomerang, Hookshot, ice).
-// Many enemies check the hit's types directly and take the stun/freeze branch first (Gohma larvae, for one), so
-// with those included his attacks would only ever paralyze them.
-#define DMG_GANONDORF_PLAYER \
-    ((u32) ~(DMG_SHIELD | DMG_DEKU_NUT | DMG_BOOMERANG | DMG_HOOKSHOT | DMG_ARROW_ICE | DMG_MAGIC_ICE))
-
 typedef enum {
     /*  0 */ GDF_FWORK_0,
     /*  1 */ GDF_FWORK_1,
@@ -179,110 +161,6 @@ typedef struct BossGanon {
     /* 0x0718 */ s16 organAlpha;
     /* 0x071A */ u8 useOpenHand;
     /* 0x071B */ u8 windowShatterState;
-    // SoH: player-controlled Ganondorf
-    u8 playerHidden;     // not drawn this frame (first person, cutscene showing Link, ...)
-    u16 playerBtnHeld;   // button that started the current attack, while it is still held
-    s16 playerHeldTimer; // how long it has been held
-    s16 playerPrevInvincibilityTimer;
-    Vec3f playerAimPos; // where attacks are thrown at
-    f32 playerFloorY;   // floor below Link, replaces the arena floor (y = 0)
-    Vec3f playerOrganPos; // where the organ stands (its room origin)
-    f32 playerSprintWeight; // holding A on the ground: sprinting
-    f32 playerClimbPhase;   // ladder and vine climbing cycle
-    f32 playerItemWeight;   // holding a found item up
-    f32 playerRideFrame;  // riding his horse: the young Ganondorf horseback ride cycle
-    u8 playerCrawlFlame;  // travelling through a crawlspace as a purple flame
-    s16 playerOrganCam;   // close-up camera on the keys while he plays (0: none)
-    s16 playerOrganYaw;   // which way the organ faces
-    f32 playerOrganSink;  // how far below the floor the organ is, 0 = fully up
-    u8 playerOrganMusic;  // Ganondorf's Theme is playing and the area music has to come back afterwards
-    u16 playerPrevBgm;    // the area music to bring back
-    s16 playerShieldPitch; // tilt of the cape shield, from the stick while blocking
-    u8 playerGrounded;       // standing/walking on the ground instead of floating (not levitating)
-    f32 playerGroundOffset;  // keeps his feet on the floor whatever the animation
-    f32 playerWalkFrame;     // phase of the walk cycle
-    f32 playerWalkWeight;    // 0 standing .. 1 walking
-    f32 playerWalkStride;    // wider than the walk animation when running
-    f32 playerAuraScale;    // insta-kill dark aura (D-Pad Left mode): size of the vortex around him
-    f32 playerAuraAlpha;
-    s16 playerAuraTimer;
-    f32 playerStandLegsWeight; // grounded: his legs stand while his upper body plays a floating action
-    u8 playerStandAnim;      // the standing (not floating) idle is playing
-    // Sword stance (D-Pad Left)
-    u8 playerSwordAttack;       // which attack is playing (GDF_SWORD_ATK_*)
-    u8 playerSwordQueued;       // B pressed during a swing: the next hit of the combo
-    u8 playerSwordGuard;        // R held with the sword out
-    u8 playerHandMtxValid;
-    u8 playerBladeValid;        // blade positions from the last two draws
-    s16 playerSwordTimer;
-    s16 playerDashTimer;
-    s16 playerDashYaw;
-    s16 playerSpinYaw;          // extra body turn for the spin slash
-    f32 playerDashSpeed;
-    f32 playerSheathArmWeight;  // left arm holding the sheath at his hip
-    f32 playerSwordArmWeight;   // right arm in a sword pose
-    f32 playerGuardWeight;
-    Vec3s playerArmFrom[3];     // right arm when the attack started, to blend from
-    MtxF playerLeftHandMtx;
-    MtxF playerRightHandMtx;
-    Vec3f playerBladeBase;
-    Vec3f playerBladeTip;
-    Vec3f playerBladeBasePrev;
-    Vec3f playerBladeTipPrev;
-    ColliderQuad playerSwordQuad;
-    s32 playerSwordBlure;
-    u8 playerWasAirborne;  // Link was jumping or falling
-    f32 playerJumpTopY;    // highest point of the jump, for the landing
-    f32 playerAirWeight;   // 0 on the ground .. 1 in the air (jump pose)
-    u8 playerOrganOcarina; // the organ is played as his ocarina (Link's songs), not for Ganondorf's Theme
-    // Phantom Ganon skin: his skeleton, posed from Ganondorf's every frame, and the spear's hit points
-    SkelAnime playerPgSkel;
-    Vec3s playerPgJoints[26];
-    Vec3s playerPgMorph[26];
-    u8 playerPgReady;
-    s16 playerAimYaw; // the attack direction (the engine overwrites yawTowardsPlayer every frame)
-    u8 playerSpearValid;
-    Vec3f playerSpearBase;
-    Vec3f playerSpearTip;
-} BossGanon;
-
-// SoH: "Play as Ganondorf"
-s32 BossGanon_Player_IsBusy(Actor* thisx);
-s32 BossGanon_Player_IsHolding(void);
-s32 BossGanon_Player_InStance(void); // his sword or trident is out
-s32 BossGanon_Player_TryBreakKick(Actor* thisx, PlayState* play); // A at a shut door: he kicks it in
-s32 BossGanon_Player_IsPhantom(void);
-s32 BossGanon_Player_GoronLook(void); // the Goron Tunic look: Iron Knuckle armour and a burning cape
-s32 BossGanon_Player_ZoraLook(void);  // the Zora Tunic look: a mage, with a great cape of ice
-s32 BossGanon_Player_RobeHoodOn(void);
-s32 BossGanon_Player_KnightLook(void);
-void BossGanon_Player_PlateMaterialExt(Gfx** gfx, s32 trim); // the knight armour's plate material
-s32 BossGanon_Player_ArmorBackPoint(Vec3f* world, Vec3f* out); // where the cape's mount meets his back armour
-s32 BossGanon_Player_PieceAdjustPoints(const char* piece, Vec3f* points, s32 count); // "<piece>.rot/.scale_xyz/.offset"
-s32 BossGanon_Player_HelmetOn(void);   // the knight's helmet: Phantom Ganon's head in the armour's metal
-s32 BossGanon_Player_GetNeckFront(Vec3f* out); // where the cape's clasp chain crosses his throat // either tunic's Iron Knuckle armour // the mage robe's hood (GanondorfHood.cpp)
-// The guards hunt him (he murdered someone in the market and hasn't left by the drawbridge)
-s32 BossGanon_Player_IsWanted(void);
-// Killing NPCs (option): attack volumes from Ganon's form, and the check itself
-void BossGanon_Player_NoteAttackCylinder(ColliderCylinder* cyl);
-void BossGanon_Player_NoteAttackSphere(Vec3f* center, f32 radius);
-void BossGanon_Player_KillNpcsNow(PlayState* play);
-s32 BossGanon_Player_GetItemHoldPos(Actor* thisx, Vec3f* pos);
-void BossGanon_Player_HoldUp(s16 frames);   // hold something up over his head for a while, as for an item
-s32 BossGanon_Player_GetHeldUpPos(Vec3f* pos); // where that is (false when he isn't)
-s32 BossGanon_Player_AuraReaches(PlayState* play, Actor* boss, Vec3f* pos);
-void BossGanon_Player_AuraFakeHit(Collider* col, ColliderInfo* elem, u32 dmgFlags);
-s32 BossGanon_Player_SwallowLightBall(PlayState* play, Vec3f* pos, f32 radius);
-s32 BossGanon_Player_IsHidden(Actor* thisx);
-// The player's Ganondorf in control (his cape and effects are his), or NULL
-Actor* BossGanon_Player_GetMain(void);
-s32 BossGanon_IsPlayerAttack(Actor* actor);
-s32 BossGanon_Player_CanAct(Actor* thisx);
-s32 BossGanon_Player_IsCapeUp(Actor* thisx);
-void BossGanon_Player_UpdateCapeShield(Actor* thisx, PlayState* play);
-s32 BossGanon_Player_GetDash(Actor* thisx, s16* yaw, f32* speed);
-// Shared with Ganon (Boss_Ganon2)
-s32 BossGanon_Player_ShouldHideAnyForm(PlayState* play);
-s32 BossGanon_Player_LinkCanAttack(PlayState* play);
+} BossGanon; // size = 0x71C
 
 #endif

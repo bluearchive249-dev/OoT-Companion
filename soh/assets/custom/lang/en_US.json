@@ -548,14 +548,6 @@
                     "Red Ice will have a particle effect inside it when it holds a randomized item"
                 ]
             },
-            "shuffle_fire_gorons": {
-                "name": "Shuffle Fire Temple Gorons",
-                "description": [
-                    "The Gorons imprisoned in the Fire Temple will give a randomized item ",
-                    "when talked to after being freed.\n",
-                    "Gorons will have a particle effect above them when they hold a randomized item."
-                ]
-            },
             "shuffle_signs": {
                 "name": "Shuffle Signs",
                 "description": [
@@ -891,10 +883,6 @@
                     "Shuffle the rewards the Beggar gives for selling bugs, fish, and Blue Fire.\n",
                     "The Beggar will give separate rewards to child and adult."
                 ]
-            },
-            "shuffle_fishermans_hat": {
-                "name": "Shuffle Fisherman's Hat",
-                "description": "The Fisherman gives a reward for returning his hat."
             },
             "shuffle_adult_trade": {
                 "name": "Shuffle Adult Trade",
@@ -1529,13 +1517,6 @@
                 "description": [
                     "Adds Roc's Feather to the item pool. Roc's Feather is a custom item granting the player a jump on demand. ",
                     "The jump can also be used when already in mid-air. Roc's Feather is not considered by logic."
-                ]
-            },
-            "nayrus_love_uses": {
-                "name": "Nayru's Love Uses",
-                "description": [
-                    "Limits Nayru's Love to a set number of casts. Each Nayru's Love you find adds one use, and this sets ",
-                    "how many are placed in the item pool. Starting with Nayru's Love counts as one. 0 keeps it unlimited."
                 ]
             },
             "slingbow_break_beehives": {
@@ -2779,10 +2760,6 @@
             "shadow_statue": {
                 "name": "Shadow Temple River Statue with Bombchu",
                 "description": "By sending a Bombchu around the edge of the gorge, you can knock down the statue without needing a Bow. Applies in both Vanilla and MQ Shadow."
-            },
-            "shadow_bunny_statue": {
-                "name": "Shadow Temple climb onto the statue as Child with Bunny Hood and Jumpslash",
-                "description": "Child cannot normally jump onto the broken statue from the boss room side of the chasm, however by combining a Bunny Hood jump and a frame perfect Jumpslash they can barely make it on top."
             },
             "shadow_bongo": {
                 "name": "Shadow Temple Bongo Bongo without projectiles",

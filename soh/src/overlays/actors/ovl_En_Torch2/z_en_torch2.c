@@ -5,7 +5,6 @@
  */
 
 #include "z_en_torch2.h"
-#include "soh/Enhancements/ExtraModes/GanondorfInvasion.h"
 #include "objects/object_torch2/object_torch2.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include <libultraship/bridge/consolevariablebridge.h>
@@ -78,7 +77,6 @@ static u8 sZTargetFlag = false;
 static u8 sDeathFlag = false;
 
 static Input sInput;
-static u16 sPossessedPrevButtons = 0; // Invasion mode: Ganondorf's buttons last frame
 static u8 sSwordJumpState;
 static Vec3f sSpawnPoint;
 static u8 sJumpslashTimer;
@@ -143,15 +141,7 @@ void EnTorch2_Init(Actor* thisx, PlayState* play2) {
     this->currentShield = PLAYER_SHIELD_HYLIAN;
     this->heldItemAction = this->heldItemId = PLAYER_IA_SWORD_MASTER;
     Player_SetModelGroup(this, PLAYER_MODELGROUP_SWORD_AND_SHIELD);
-    {
-        // Dark Link is always adult-sized (his skeleton is adult Link's): set up with adult Link's proportions even
-        // while Link is a child (Invasion mode's Dark Link), or he stands sunk into the ground
-        s32 age = gSaveContext.linkAge;
-
-        gSaveContext.linkAge = LINK_AGE_ADULT;
-        play->playerInit(this, play, &gDarkLinkSkel);
-        gSaveContext.linkAge = age;
-    }
+    play->playerInit(this, play, &gDarkLinkSkel);
     this->actor.naviEnemyId = 0x26;
     this->cylinder.base.acFlags = AC_ON | AC_TYPE_PLAYER;
     this->meleeWeaponQuads[0].base.atFlags = this->meleeWeaponQuads[1].base.atFlags = AT_ON | AT_TYPE_ENEMY;
@@ -264,17 +254,11 @@ void EnTorch2_Update(Actor* thisx, PlayState* play2) {
     u32 pad54;
     f32 sp50;
     s16 sp4E;
-    u8 possessed;
 
     sp5A = player->actor.shape.rot.y - this->actor.shape.rot.y;
     input->cur.button = 0;
     camera = Play_GetCamera(play, 0);
     attackItem = EnTorch2_GetAttackItem(play, this);
-    // Invasion mode: driven by Ganondorf, he skips waiting for Link
-    if ((sActionState == ENTORCH2_WAIT) && GdfInvasion_DarkLinkPossessed(thisx)) {
-        sActionState = ENTORCH2_ATTACK;
-        sAlpha = 255;
-    }
     switch (sActionState) {
         case ENTORCH2_WAIT:
             this->actor.shape.rot.y = this->actor.world.rot.y = this->actor.yawTowardsPlayer;
@@ -605,9 +589,6 @@ void EnTorch2_Update(Actor* thisx, PlayState* play2) {
         input->cur.button |= BTN_Z;
     }
 
-    // Invasion mode: Ganondorf's controller in place of his own (not while he's dying)
-    possessed = (sActionState != ENTORCH2_DEATH) && GdfInvasion_DarkLinkInput(thisx, input, camera->camDir.y);
-
     // Updates Dark Link's "controller". The conditional seems to cause him to
     // stop targeting and hold shield if he's been holding it long enough.
 
@@ -618,13 +599,6 @@ void EnTorch2_Update(Actor* thisx, PlayState* play2) {
     }
     input->rel.button = input->prev.button & pad54;
     input->prev.button = input->cur.button & (u16) ~(BTN_A | BTN_B);
-    // Invasion mode: a player's buttons press once per push (the AI's A and B press again every frame they're held)
-    if (possessed) {
-        input->press.button = input->cur.button & (u16)~sPossessedPrevButtons;
-        input->rel.button = sPossessedPrevButtons & (u16)~input->cur.button;
-        sPossessedPrevButtons = input->cur.button;
-        input->prev.button = input->cur.button;
-    }
     PadUtils_UpdateRelXY(input);
 
     if (CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0)) {
@@ -709,17 +683,6 @@ void EnTorch2_Update(Actor* thisx, PlayState* play2) {
     }
 
     play->playerUpdate(this, play, input);
-
-    // Invasion mode: his copy in Ganondorf's game only shows him (no hurting, no getting hurt)
-    if (GdfInvasion_IsInvader()) {
-        this->meleeWeaponQuads[0].base.atFlags &= ~AT_ON;
-        this->meleeWeaponQuads[1].base.atFlags &= ~AT_ON;
-        this->shieldQuad.base.atFlags &= ~AT_ON;
-        this->cylinder.base.acFlags &= ~AC_ON;
-        this->meleeWeaponQuads[0].base.acFlags &= ~AC_ON;
-        this->meleeWeaponQuads[1].base.acFlags &= ~AC_ON;
-        this->shieldQuad.base.acFlags &= ~AC_ON;
-    }
 
     /*
      * Handles sword clanks and removes their recoil for both Links. Dark Link staggers

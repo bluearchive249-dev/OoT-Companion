@@ -8,11 +8,8 @@
 #include <libultraship/bridge/resourcebridge.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
-#include "soh/Enhancements/Items/BeamosBlaster.h"
 #include "soh/Enhancements/randomizer/draw.h"
 #include "soh/ResourceManagerHelpers.h"
-#include "soh/Enhancements/Graphics/LinkGanonCape.h"
-#include "soh/Enhancements/ExtraModes/PlayAsGanondorf.h"
 
 #include <stdlib.h>
 #include <libultraship/bridge/consolevariablebridge.h>
@@ -599,13 +596,6 @@ void Player_SetModels(Player* this, s32 modelGroup) {
         }
     }
 
-    // Beamos Blaster: the sword blade is replaced by an empty fist, the gun is drawn in the hand limb post-draw.
-    if (BeamosBlaster_IsGunAction(this->heldItemAction) && ((this->leftHandType == PLAYER_MODELTYPE_LH_SWORD) ||
-                                                            (this->leftHandType == PLAYER_MODELTYPE_LH_BGS))) {
-        this->leftHandType = PLAYER_MODELTYPE_LH_CLOSED;
-        this->leftHandDLists = &sPlayerDListGroups[PLAYER_MODELTYPE_LH_CLOSED][gSaveContext.linkAge];
-    }
-
     // Right hand
     this->rightHandType = gPlayerModelTypes[modelGroup][PLAYER_MODELGROUPENTRY_RIGHT_HAND];
     this->rightHandDLists = &sPlayerDListGroups[this->rightHandType][gSaveContext.linkAge];
@@ -819,15 +809,13 @@ Player* Player_UnsetMask(PlayState* play) {
 s32 Player_HasMirrorShieldEquipped(PlayState* play) {
     Player* this = GET_PLAYER(play);
 
-    // SoH: "Play as Ganondorf", his raised cape works as a Mirror Shield too
-    return (this->currentShield == PLAYER_SHIELD_MIRROR) || PlayAsGanondorf_IsCapeShielding();
+    return (this->currentShield == PLAYER_SHIELD_MIRROR);
 }
 
 s32 Player_HasMirrorShieldSetToDraw(PlayState* play) {
     Player* this = GET_PLAYER(play);
 
-    return ((this->rightHandType == PLAYER_MODELTYPE_RH_SHIELD) && (this->currentShield == PLAYER_SHIELD_MIRROR)) ||
-           PlayAsGanondorf_IsCapeShielding(); // SoH: "Play as Ganondorf"
+    return (this->rightHandType == PLAYER_MODELTYPE_RH_SHIELD) && (this->currentShield == PLAYER_SHIELD_MIRROR);
 }
 
 s32 Player_ActionToMagicSpell(Player* this, s32 itemAction) {
@@ -877,9 +865,6 @@ s32 Player_ActionToMeleeWeapon(s32 itemAction) {
 }
 
 s32 Player_GetMeleeWeaponHeld(Player* this) {
-    if (BeamosBlaster_IsGunAction(this->heldItemAction)) {
-        return 0; // guns are not melee weapons
-    }
     return Player_ActionToMeleeWeapon(this->heldItemAction);
 }
 
@@ -946,10 +931,6 @@ s32 Player_GetEnvironmentalHazard(PlayState* play) {
 
     if (play->roomCtx.curRoom.behaviorType2 == ROOM_BEHAVIOR_TYPE2_3) { // Room is hot
         envHazard = PLAYER_ENV_HAZARD_HOTROOM - 1;
-    } else if (((this->stateFlags1 & PLAYER_STATE1_IN_WATER) || (this->underwaterTimer > 80)) &&
-               PlayAsGanondorf_BreathesUnderwater(play, this)) {
-        // SoH: "Play as Ganondorf", he doesn't need air, so no drowning timer
-        envHazard = PLAYER_ENV_HAZARD_SWIMMING - 1;
     } else if ((this->underwaterTimer > 80) &&
                ((this->currentBoots == PLAYER_BOOTS_IRON) || (this->underwaterTimer >= 300))) { // Deep underwater
         envHazard = ((this->currentBoots == PLAYER_BOOTS_IRON) && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND))
@@ -1103,10 +1084,6 @@ void Player_DrawImpl(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dL
 
     if (GameInteractor_Should(VB_APPLY_TUNIC_COLOR, true, data, color)) {
         gDPSetEnvColor(POLY_OPA_DISP++, color->r, color->g, color->b, 0);
-        // SoH: Ganondorf's Cape hood needs this to restore the tunic color after the head
-        LinkGanonCape_SetTunicColor(true, color->r, color->g, color->b);
-    } else {
-        LinkGanonCape_SetTunicColor(false, 0, 0, 0);
     }
 
     // If we have a custom link model, always use the most detailed LOD
@@ -1278,8 +1255,6 @@ s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** 
                                           void* thisx) {
     Player* this = (Player*)thisx;
 
-    BeamosBlaster_AdjustLimb(play, this, limbIndex, rot);
-
     if (CVarGetInteger(CVAR_ENHANCEMENT("EquipmentAlwaysVisible"), 0) &&
         CVarGetInteger(CVAR_ENHANCEMENT("ScaleAdultEquipmentAsChild"), 0) && LINK_IS_CHILD) {
         if (limbIndex == PLAYER_LIMB_L_HAND) {
@@ -1344,9 +1319,6 @@ s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** 
         if (*dList != NULL) {
             D_80160000++;
         }
-
-        // SoH: Ganondorf's Cape hood replaces Link's cap
-        LinkGanonCape_OverrideLimb(play, this, limbIndex, (void**)dList);
 
         if (limbIndex == PLAYER_LIMB_HEAD) {
             if (CVarGetInteger(CVAR_COSMETIC("Link.HeadScale.Changed"), 0)) {
@@ -1499,10 +1471,6 @@ s32 Player_OverrideLimbDrawGameplayFirstPerson(PlayState* play, s32 limbIndex, G
                 handOutDlIndex = 1;
             }
             *dList = sFirstPersonLeftHandDLs[handOutDlIndex];
-            if (BeamosBlaster_UseGunArms(this)) {
-                // Supporting hand of the two-handed grip.
-                *dList = LINK_IS_ADULT ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL;
-            }
         } else if (limbIndex == PLAYER_LIMB_R_SHOULDER) {
             *dList = sFirstPersonRightShoulderDLs[gSaveContext.linkAge];
         } else if (limbIndex == PLAYER_LIMB_R_FOREARM) {
@@ -1519,10 +1487,6 @@ s32 Player_OverrideLimbDrawGameplayFirstPerson(PlayState* play, s32 limbIndex, G
             }
             *dList = Player_HoldsHookshot(this) ? gLinkAdultRightHandHoldingHookshotFarDL
                                                 : sFirstPersonRightHandHoldingWeaponDLs[firstPersonWeaponIndex];
-            if (BeamosBlaster_UseGunArms(this)) {
-                // No bow or slingshot: a plain fist around the gun grip.
-                *dList = LINK_IS_ADULT ? gLinkAdultRightHandClosedNearDL : gLinkChildRightHandClosedNearDL;
-            }
         } else {
             *dList = NULL;
         }
@@ -1712,13 +1676,8 @@ void Player_DrawGetItem(PlayState* play, Player* this) {
     // if (!this->giObjectLoading || !osRecvMesg(&this->giObjectLoadQueue, NULL, OS_MESG_NOBLOCK)) // OTRTODO: Do
     // something about osRecvMesg here...
     {
-        Vec3f ganondorfHands; // SoH: "Play as Ganondorf", he holds the item up between his fists
-
         this->giObjectLoading = false;
-        Player_DrawGetItemImpl(play, this,
-                               PlayAsGanondorf_GetItemHoldPos(play, this, &ganondorfHands) ? &ganondorfHands
-                                                                                             : &sGetItemRefPos,
-                               ABS(this->unk_862));
+        Player_DrawGetItemImpl(play, this, &sGetItemRefPos, ABS(this->unk_862));
     }
 }
 
@@ -1834,19 +1793,11 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
         Matrix_MultVec3f(&sZeroVec, D_80160000);
     }
 
-    // SoH: remember where Link's shoulders are this frame for Ganondorf's cape
-    LinkGanonCape_RecordLimb(play, this, limbIndex);
-
     if (limbIndex == PLAYER_LIMB_L_HAND) {
         MtxF sp14C;
         Actor* hookedActor;
 
         Math_Vec3f_Copy(&this->leftHandPos, D_80160000);
-
-        if ((this->actor.scale.y >= 0.0f) && BeamosBlaster_IsGunAction(this->heldItemAction) &&
-            (this->itemAction == this->heldItemAction)) {
-            BeamosBlaster_DrawInHand(play, this, 0);
-        }
 
         if (this->itemAction == PLAYER_IA_DEKU_STICK) {
             Vec3f sp124[3];
@@ -1926,11 +1877,6 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
         }
     } else if (limbIndex == PLAYER_LIMB_R_HAND) {
         Actor* heldActor = this->heldActor;
-
-        if ((this->actor.scale.y >= 0.0f) && BeamosBlaster_IsGunAction(this->heldItemAction) &&
-            (this->itemAction == this->heldItemAction)) {
-            BeamosBlaster_DrawInHand(play, this, 1);
-        }
 
         if (this->rightHandType == PLAYER_MODELTYPE_RH_FF) {
             Matrix_Get(&this->shieldMf);
@@ -2262,11 +2208,8 @@ void Player_DrawPauseImpl(PlayState* play, void* gameplayKeep, void* linkObject,
 
     gSPSegment(POLY_OPA_DISP++, 0x0C, gCullBackDList);
 
-    // SoH: "Play as Ganondorf", he stands there instead
-    if (!BossGanon_Player_DrawPause(play, pos, rot)) {
-        Player_DrawImpl(play, skelAnime->skeleton, skelAnime->jointTable, skelAnime->dListCount, 0, tunic, boots, 0,
-                        Player_OverrideLimbDrawPause, NULL, &playerSwordAndShield);
-    }
+    Player_DrawImpl(play, skelAnime->skeleton, skelAnime->jointTable, skelAnime->dListCount, 0, tunic, boots, 0,
+                    Player_OverrideLimbDrawPause, NULL, &playerSwordAndShield);
 
     if (CVarGetInteger(CVAR_GENERAL("PauseMenuAnimatedLinkTriforce"), 0)) {
         Matrix_SetTranslateRotateYXZ(pos->x - (LINK_AGE_IN_YEARS == YEARS_ADULT ? 25 : 0),

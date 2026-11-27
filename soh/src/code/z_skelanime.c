@@ -1,6 +1,4 @@
 #include "global.h"
-#include "soh/Enhancements/ExtraModes/GanondorfRagdoll.h" // SoH: ragdolls for the ones Ganondorf throws
-#include "soh/Enhancements/ExtraModes/GanondorfInvasion.h"
 #include "vt.h"
 #include <string.h>
 #include <stdio.h>
@@ -77,7 +75,6 @@ void SkelAnime_DrawLimbLod(PlayState* play, s32 limbIndex, void** skeleton, Vec3
  */
 void SkelAnime_DrawLod(PlayState* play, void** skeleton, Vec3s* jointTable, OverrideLimbDrawOpa overrideLimbDraw,
                        PostLimbDrawOpa postLimbDraw, void* arg, s32 lod) {
-    jointTable = GdfRagdoll_Pose(play, skeleton, jointTable, arg); // SoH: "Play as Ganondorf"
     LodLimb* rootLimb;
     s32 pad;
     Gfx* dList;
@@ -194,7 +191,6 @@ void SkelAnime_DrawFlexLimbLod(PlayState* play, s32 limbIndex, void** skeleton, 
  */
 void SkelAnime_DrawFlexLod(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dListCount,
                            OverrideLimbDrawOpa overrideLimbDraw, PostLimbDrawOpa postLimbDraw, void* arg, s32 lod) {
-    jointTable = GdfRagdoll_Pose(play, skeleton, jointTable, arg); // SoH: "Play as Ganondorf"
     LodLimb* rootLimb;
     s32 pad;
     Gfx* newDList;
@@ -334,7 +330,6 @@ Gfx* SkelAnime_DrawSkeleton2(PlayState* play, SkelAnime* skelAnime, OverrideLimb
  */
 void SkelAnime_DrawOpa(PlayState* play, void** skeleton, Vec3s* jointTable, OverrideLimbDrawOpa overrideLimbDraw,
                        PostLimbDrawOpa postLimbDraw, void* arg) {
-    jointTable = GdfRagdoll_Pose(play, skeleton, jointTable, arg); // SoH: "Play as Ganondorf"
     StandardLimb* rootLimb;
     s32 pad;
     Gfx* dList;
@@ -447,7 +442,6 @@ void SkelAnime_DrawFlexLimbOpa(PlayState* play, s32 limbIndex, void** skeleton, 
  */
 void SkelAnime_DrawFlexOpa(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dListCount,
                            OverrideLimbDrawOpa overrideLimbDraw, PostLimbDrawOpa postLimbDraw, void* arg) {
-    jointTable = GdfRagdoll_Pose(play, skeleton, jointTable, arg); // SoH: "Play as Ganondorf"
     StandardLimb* rootLimb;
     s32 pad;
     Gfx* newDList;
@@ -609,7 +603,6 @@ Gfx* SkelAnime_DrawLimb(PlayState* play, s32 limbIndex, void** skeleton, Vec3s* 
  */
 Gfx* SkelAnime_Draw(PlayState* play, void** skeleton, Vec3s* jointTable, OverrideLimbDraw overrideLimbDraw,
                     PostLimbDraw postLimbDraw, void* arg, Gfx* gfx) {
-    jointTable = GdfRagdoll_Pose(play, skeleton, jointTable, arg); // SoH: "Play as Ganondorf"
     StandardLimb* rootLimb;
     s32 pad;
     Gfx* dList;
@@ -717,7 +710,6 @@ Gfx* SkelAnime_DrawFlexLimb(PlayState* play, s32 limbIndex, void** skeleton, Vec
  */
 Gfx* SkelAnime_DrawFlex(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dListCount,
                         OverrideLimbDraw overrideLimbDraw, PostLimbDraw postLimbDraw, void* arg, Gfx* gfx) {
-    jointTable = GdfRagdoll_Pose(play, skeleton, jointTable, arg); // SoH: "Play as Ganondorf"
     StandardLimb* rootLimb;
     s32 pad;
     Gfx* newDList;
@@ -1564,8 +1556,6 @@ void SkelAnime_SetUpdate(SkelAnime* skelAnime) {
  * finishes.
  */
 s32 SkelAnime_Update(SkelAnime* skelAnime) {
-    GdfInvasion_NoteSkel(skelAnime);
-    GdfInvasion_NoteSkel(skelAnime);
     return skelAnime->update.normal(skelAnime);
 }
 

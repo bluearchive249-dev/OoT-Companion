@@ -1608,8 +1608,7 @@ void EnGo2_Init(Actor* thisx, PlayState* play) {
             EnGo2_SetupRolling(this, play);
             break;
         case GORON_FIRE_GENERIC:
-            if (GameInteractor_Should(VB_DESPAWN_FREED_FIRE_GORON,
-                                      Flags_GetSwitch(play, (this->actor.params & 0xFC00) >> 0xA), this)) {
+            if (Flags_GetSwitch(play, (this->actor.params & 0xFC00) >> 0xA)) {
                 Actor_Kill(&this->actor);
             } else {
                 this->isAwake = true;
@@ -1931,7 +1930,6 @@ void EnGo2_GoronFireGenericAction(EnGo2* this, PlayState* play) {
     switch (this->goronState) {
         case 0: // Wake up
             if (Message_GetState(&play->msgCtx) == TEXT_STATE_CLOSING) {
-                GameInteractor_Should(VB_GIVE_ITEM_FROM_FIRE_GORON, true, this);
                 if (GameInteractor_Should(VB_PLAY_GORON_FREE_CS, true)) {
                     EnGo2_GoronFireCamera(this, play);
                     play->msgCtx.msgMode = MSGMODE_PAUSED;

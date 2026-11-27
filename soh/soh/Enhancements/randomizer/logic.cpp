@@ -1,11 +1,9 @@
-#include <array>
-#include <type_traits>
-#include <utility>
 #include <spdlog/spdlog.h>
 
 #include "logic.h"
 #include "bean_patches.h"
 #include "../debugger/performanceTimer.h"
+#include "soh/Enhancements/randomizer/randomizerEnums.h"
 #include "soh/OTRGlobals.h"
 #include "randomizer.h"
 #include "randomizerEnumStrings.h"
@@ -79,7 +77,7 @@ bool Logic::HasItem(RandomizerGet itemName) {
         case RG_MASTER_SWORD:
         case RG_IRON_BOOTS:
         case RG_HOVER_BOOTS:
-            return CheckEquipment(RandoGetToEquipFlag[itemName]);
+            return CheckEquipment(RandoGetToEquipFlag.at(itemName));
         case RG_PROGRESSIVE_GORONSWORD:
         case RG_GIANTS_KNIFE:
             // progressive leaves Medigoron replacing broken knives, so the first one has to be found
@@ -124,7 +122,7 @@ bool Logic::HasItem(RandomizerGet itemName) {
             // Misc Quest Items
         case RG_STONE_OF_AGONY:
         case RG_GERUDO_MEMBERSHIP_CARD:
-            return CheckQuestItem(RandoGetToQuestItem[itemName]);
+            return CheckQuestItem(RandoGetToQuestItem.at(itemName));
         case RG_DOUBLE_DEFENSE:
             return GetSaveContext()->isDoubleDefenseAcquired;
             // Masks
@@ -191,7 +189,7 @@ bool Logic::HasItem(RandomizerGet itemName) {
         case RG_ZORAS_RIVER_BEAN_SOUL:
         case RG_SKELETON_KEY:
         case RG_RUTOS_LETTER:
-            return CheckRandoInf(StaticData::RandoGetToRandInf[itemName]);
+            return CheckRandoInf(StaticData::RandoGetToRandInf.at(itemName));
             // Boss Souls
         case RG_GOHMA_SOUL:
         case RG_KING_DODONGO_SOUL:
@@ -201,10 +199,10 @@ bool Logic::HasItem(RandomizerGet itemName) {
         case RG_MORPHA_SOUL:
         case RG_BONGO_BONGO_SOUL:
         case RG_TWINROVA_SOUL:
-            return !ctx->GetOption(RSK_SHUFFLE_BOSS_SOULS) || CheckRandoInf(StaticData::RandoGetToRandInf[itemName]);
+            return !ctx->GetOption(RSK_SHUFFLE_BOSS_SOULS) || CheckRandoInf(StaticData::RandoGetToRandInf.at(itemName));
         case RG_GANON_SOUL:
             return ctx->GetOption(RSK_GANONS_SOUL).Is(RO_GANONS_SOUL_STARTWITH) ||
-                   CheckRandoInf(StaticData::RandoGetToRandInf[itemName]);
+                   CheckRandoInf(StaticData::RandoGetToRandInf.at(itemName));
             // Overworld Keys
         case RG_GUARD_HOUSE_KEY:
         case RG_MARKET_BAZAAR_KEY:
@@ -231,7 +229,7 @@ bool Logic::HasItem(RandomizerGet itemName) {
         case RG_HYLIA_LAB_KEY:
         case RG_FISHING_HOLE_KEY:
             return !ctx->GetOption(RSK_LOCK_OVERWORLD_DOORS) || HasItem(RG_SKELETON_KEY) ||
-                   CheckRandoInf(StaticData::RandoGetToRandInf[itemName]);
+                   CheckRandoInf(StaticData::RandoGetToRandInf.at(itemName));
             // Boss Keys
         case RG_FOREST_TEMPLE_BOSS_KEY:
         case RG_FIRE_TEMPLE_BOSS_KEY:
@@ -239,7 +237,7 @@ bool Logic::HasItem(RandomizerGet itemName) {
         case RG_SPIRIT_TEMPLE_BOSS_KEY:
         case RG_SHADOW_TEMPLE_BOSS_KEY:
         case RG_GANONS_CASTLE_BOSS_KEY:
-            return CheckDungeonItem(DUNGEON_KEY_BOSS, RandoGetToDungeonScene[itemName]);
+            return CheckDungeonItem(DUNGEON_KEY_BOSS, RandoGetToDungeonScene.at(itemName));
             // Maps
         case RG_DEKU_TREE_MAP:
         case RG_DODONGOS_CAVERN_MAP:
@@ -251,7 +249,7 @@ bool Logic::HasItem(RandomizerGet itemName) {
         case RG_SHADOW_TEMPLE_MAP:
         case RG_BOTTOM_OF_THE_WELL_MAP:
         case RG_ICE_CAVERN_MAP:
-            return CheckDungeonItem(DUNGEON_MAP, RandoGetToDungeonScene[itemName]);
+            return CheckDungeonItem(DUNGEON_MAP, RandoGetToDungeonScene.at(itemName));
             // Compasses
         case RG_DEKU_TREE_COMPASS:
         case RG_DODONGOS_CAVERN_COMPASS:
@@ -263,7 +261,7 @@ bool Logic::HasItem(RandomizerGet itemName) {
         case RG_SHADOW_TEMPLE_COMPASS:
         case RG_BOTTOM_OF_THE_WELL_COMPASS:
         case RG_ICE_CAVERN_COMPASS:
-            return CheckDungeonItem(DUNGEON_COMPASS, RandoGetToDungeonScene[itemName]);
+            return CheckDungeonItem(DUNGEON_COMPASS, RandoGetToDungeonScene.at(itemName));
             // Wallets
         case RG_ADULT_WALLET:
             return CurrentUpgrade(UPG_WALLET) >= 1;
@@ -552,12 +550,8 @@ bool Logic::CanUse(RandomizerGet itemName) {
             return true; // AmmoCanDrop || (HasBottle() && Get(LOGIC_BUY_MAGIC_POTION))
         case RG_DINS_FIRE:
         case RG_FARORES_WIND:
-        case RG_LENS_OF_TRUTH:
-            return CanUse(RG_MAGIC_SINGLE);
         case RG_NAYRUS_LOVE:
-            if (ctx->GetOption(RSK_NAYRUS_LOVE_USES).Get() > 0) {
-                return false;
-            }
+        case RG_LENS_OF_TRUTH:
             return CanUse(RG_MAGIC_SINGLE);
         case RG_FIRE_ARROWS:
         case RG_ICE_ARROWS:
@@ -709,34 +703,9 @@ bool Logic::CanGroundJumpslash(bool hasBombflower) {
            (CanUse(RG_BOMB_BAG) || (hasBombflower && HasItem(RG_GORONS_BRACELET)));
 }
 
-bool Logic::CanMidairGroundJump(bool hasBombflower) {
+bool Logic::CanMiddairGroundJump(bool hasBombflower) {
     return ctx->GetTrickOption(RT_GROUND_JUMP_HARD) && CanStandingShield() && CanUse(RG_HOVER_BOOTS) &&
            (CanUse(RG_BOMB_BAG) || (hasBombflower && HasItem(RG_GORONS_BRACELET)));
-}
-
-bool Logic::CanMegajump(bool needsBunny, bool hasBombflower) {
-    return ctx->GetTrickOption(RT_DAMAGE_BOOST_SIMPLE) && TakeDamage(DAMAGE_NO_FAIRY) &&
-           (BunnyHood() || (!needsBunny && ctx->GetTrickOption(RT_HOVER_BOOST_SIMPLE) && CanUse(RG_HOVER_BOOTS))) &&
-           (HasExplosives() || (hasBombflower && HasItem(RG_GORONS_BRACELET)));
-}
-
-bool Logic::CanBunnyMegaJumpslash(bool hasBombflower) {
-    return ctx->GetTrickOption(RT_DAMAGE_BOOST_SIMPLE) && TakeDamage(DAMAGE_NO_FAIRY) && BunnyHood() &&
-           CanUse(RG_HOVER_BOOTS) && CanJumpslash() &&
-           (HasExplosives() || (hasBombflower && HasItem(RG_GORONS_BRACELET)));
-}
-
-bool Logic::CanMegadive(bool fallDamage, bool hasBombflower) {
-    return ctx->GetTrickOption(RT_DAMAGE_BOOST_SIMPLE) &&
-           (HasExplosives() || (hasBombflower && HasItem(RG_GORONS_BRACELET))) &&
-           (EffectiveHealth() > 16 || CanUse(RG_NAYRUS_LOVE) ||
-            (EffectiveHealth() > 8 && (fallDamage || CanUse(RG_BOTTLE_WITH_FAIRY))));
-}
-
-bool Logic::CanMidairDamageBoost(bool hasBombflower) {
-    return ctx->GetTrickOption(RT_DAMAGE_BOOST_SIMPLE) && CanJumpslash() && TakeDamage(DAMAGE_NO_FAIRY) &&
-           (CanUse(RG_BOMBCHU_5) ||
-            (CanStandingShield() && (CanUse(RG_BOMB_BAG) || (hasBombflower && HasItem(RG_GORONS_BRACELET)))));
 }
 
 bool Logic::CanOpenUnderwaterChest() {
@@ -1389,7 +1358,7 @@ bool Logic::BeanPlanted(LogicVal beanEvent) {
     return swch >> patch->swchFlag & 1;
 }
 
-bool Logic::CanMeleeRecoilHover(RecoilRequirements req) {
+bool Logic::CanRecoilHover(RecoilRequirements req) {
     if (!(CanUse(RG_HOVER_BOOTS) && ctx->GetTrickOption(RT_HOVER_BOOST_SIMPLE))) {
         return false;
     }
@@ -1414,22 +1383,22 @@ bool Logic::CanMeleeRecoilHover(RecoilRequirements req) {
 }
 
 // some actors seem to normalise recoil distance, so the only thing that can matter is attack range
-bool Logic::CanRecoilHoverFromActor(ActorRecoilRequirements req) {
+bool Logic::CanRecoilHoverFromObject(TorchRecoilRequirements req) {
     if (!(CanUse(RG_HOVER_BOOTS) && ctx->GetTrickOption(RT_HOVER_BOOST_SIMPLE))) {
         return false;
     }
     bool can = false;
     switch (req) {
-        case ARECOIL_LONG_AND_SHIELD:
+        case TRECOIL_LONG_AND_SHIELD:
             can = (CanUse(RG_STICKS) || CanUse(RG_BIGGORON_SWORD)) && CanStandingShield();
             break;
-        case ARECOIL_SHORT:
+        case TRECOIL_SHORT:
             can = CanUse(RG_MEGATON_HAMMER) || CanUse(RG_KOKIRI_SWORD);
             [[fallthrough]];
-        case ARECOIL_MASTER:
+        case TRECOIL_MASTER:
             can = can || CanUse(RG_MASTER_SWORD);
             [[fallthrough]];
-        case ARECOIL_LONG:
+        case TRECOIL_LONG:
             can = can || CanUse(RG_STICKS) || CanUse(RG_BIGGORON_SWORD);
             break;
         default:
@@ -1438,60 +1407,16 @@ bool Logic::CanRecoilHoverFromActor(ActorRecoilRequirements req) {
     return can;
 }
 
-bool Logic::CanRecoilHover(RecoilRequirements req, bool bombFlower) {
-    if (!(CanUse(RG_HOVER_BOOTS) && ctx->GetTrickOption(RT_HOVER_BOOST_SIMPLE))) {
-        return false;
-    }
-    switch (req) {
-        case RECOIL_SWORD:
-            if (CanJumpslash()) {
-                return true;
-            }
-            break;
-        case RECOIL_SWORD_AND_SHIELD:
-            // hammer without shield gives better recoils than sword and shield
-            if (CanJumpslash() && CanStandingShield()) {
-                return true;
-            }
-            [[fallthrough]];
-        case RECOIL_HAMMER:
-            if (CanUse(RG_MEGATON_HAMMER)) {
-                return true;
-            }
-            break;
-        case RECOIL_HAMMER_AND_SHIELD:
-            if (CanUse(RG_MEGATON_HAMMER) && CanStandingShield()) {
-                return true;
-            }
-        case RECOIL_MAX:
-            break;
-    }
-    if (ctx->GetTrickOption(RT_DAMAGE_BOOST_SIMPLE) && TakeDamage(DAMAGE_NO_FAIRY) &&
-        (HasExplosives() || (bombFlower && HasItem(RG_GORONS_BRACELET)))) {
-        return true;
-    }
-    return false;
-}
-
-bool Logic::CanBombRecoilHover(bool bombFlower) {
-    return ctx->GetTrickOption(RT_DAMAGE_BOOST_SIMPLE) && ctx->GetTrickOption(RT_HOVER_BOOST_SIMPLE) &&
-           CanUse(RG_HOVER_BOOTS) && HasExplosives() && TakeDamage(DAMAGE_NO_FAIRY);
-}
-
 bool Logic::Water3FCentralToHighEmblem() {
-    if (ctx->GetDungeon(WATER_TEMPLE)->IsMQ()) {
-        return CanUse(RG_HOOKSHOT) || (IsAdult && CanUse(RG_HOVER_BOOTS)) ||
-               ((IsAdult || BunnyHood()) && ctx->GetTrickOption(RT_WATER_HIGH_EMBLEM_JUMP)) || CanMegajump() ||
-               CanMidairGroundJump();
-    } else {
-        return (IsAdult && CanUse(RG_HOVER_BOOTS)) || CanMidairGroundJump() || CanMegajump() ||
-               ((Get(LOGIC_WATER_SCARECROW) && CanUse(RG_HOOKSHOT)) ||
-                ((IsAdult || BunnyHood()) && ctx->GetTrickOption(RT_WATER_HIGH_EMBLEM_JUMP)));
-    }
+    return (IsAdult && CanUse(RG_HOVER_BOOTS)) || CanMiddairGroundJump() ||
+           (Get(LOGIC_WATER_SCARECROW) && CanUse(RG_HOOKSHOT) ||
+            ((logic->IsAdult || logic->BunnyHood()) && ctx->GetTrickOption(RT_WATER_HIGH_EMBLEM_JUMP)));
 }
 
 bool Logic::WaterRisingTargetTo3FCentral() {
-    return CanUse(RG_LONGSHOT) || CanRecoilHover(RECOIL_HAMMER) || CanMegajump(true);
+    return CanUse(RG_LONGSHOT) ||
+           (ctx->GetTrickOption(RT_HOVER_BOOST_SIMPLE) && ctx->GetTrickOption(RT_DAMAGE_BOOST_SIMPLE) &&
+            HasExplosives() && CanUse(RG_HOVER_BOOTS));
 }
 
 /* Water level has 7 events that govern its logic.
@@ -1846,9 +1771,8 @@ uint16_t Logic::WaterTimer() {
     return ctx->GetTrickOption(RT_FEWER_TUNIC_REQUIREMENTS) ? Health() / 2 : 0;
 }
 
-bool Logic::TakeDamage(DamageAllowance allowance) {
-    return (CanUse(RG_BOTTLE_WITH_FAIRY) && allowance != DAMAGE_NO_FAIRY) || EffectiveHealth() > 8 ||
-           CanUse(RG_NAYRUS_LOVE);
+bool Logic::TakeDamage() {
+    return CanUse(RG_BOTTLE_WITH_FAIRY) || EffectiveHealth() > 8 || CanUse(RG_NAYRUS_LOVE);
 }
 
 // Voiding out, be it swimming too far or falling in a pit, costs a heart.
@@ -2034,19 +1958,7 @@ bool Logic::SmallKeys(SceneID scene, uint8_t requiredAmount) {
     return GetSmallKeyCount(scene) >= requiredAmount;
 }
 
-// Lookup tables indexed by RandomizerGet. Items not listed get the fill value.
-template <typename T, size_t N>
-static constexpr std::array<T, RG_MAX> ToRandoGetArray(const std::pair<RandomizerGet, T> (&pairs)[N],
-                                                       std::type_identity_t<T> fill = T{}) {
-    std::array<T, RG_MAX> array{};
-    array.fill(fill);
-    for (const auto& [randoGet, value] : pairs) {
-        array[randoGet] = value;
-    }
-    return array;
-}
-
-static constexpr std::pair<RandomizerGet, uint32_t> equipFlagTable[] = {
+std::map<RandomizerGet, uint32_t> Logic::RandoGetToEquipFlag = {
     { RG_KOKIRI_SWORD, EQUIP_FLAG_SWORD_KOKIRI },       { RG_MASTER_SWORD, EQUIP_FLAG_SWORD_MASTER },
     { RG_GIANTS_KNIFE, EQUIP_FLAG_SWORD_BGS },          { RG_BIGGORON_SWORD, EQUIP_FLAG_SWORD_BGS },
     { RG_DEKU_SHIELD, EQUIP_FLAG_SHIELD_DEKU },         { RG_HYLIAN_SHIELD, EQUIP_FLAG_SHIELD_HYLIAN },
@@ -2056,9 +1968,8 @@ static constexpr std::pair<RandomizerGet, uint32_t> equipFlagTable[] = {
     { RG_BUY_ZORA_TUNIC, EQUIP_FLAG_TUNIC_ZORA },       { RG_IRON_BOOTS, EQUIP_FLAG_BOOTS_IRON },
     { RG_HOVER_BOOTS, EQUIP_FLAG_BOOTS_HOVER }
 };
-const std::array<uint32_t, RG_MAX> Logic::RandoGetToEquipFlag = ToRandoGetArray(equipFlagTable);
 
-static constexpr std::pair<RandomizerGet, uint32_t> randInfTable[] = {
+std::map<RandomizerGet, uint32_t> StaticData::RandoGetToRandInf = {
     { RG_BRONZE_SCALE, RAND_INF_CAN_SWIM },
     { RG_POWER_BRACELET, RAND_INF_CAN_GRAB },
     { RG_ZELDAS_LETTER, RAND_INF_ZELDAS_LETTER },
@@ -2153,9 +2064,8 @@ static constexpr std::pair<RandomizerGet, uint32_t> randInfTable[] = {
     { RG_HYLIA_LAB_KEY, RAND_INF_HYLIA_LAB_KEY_OBTAINED },
     { RG_FISHING_HOLE_KEY, RAND_INF_FISHING_HOLE_KEY_OBTAINED },
 };
-const std::array<uint32_t, RG_MAX> StaticData::RandoGetToRandInf = ToRandoGetArray(randInfTable, RAND_INF_MAX);
 
-static constexpr std::pair<RandomizerGet, SceneID> dungeonSceneTable[] = {
+std::map<uint32_t, SceneID> Logic::RandoGetToDungeonScene = {
     { RG_FOREST_TEMPLE_SMALL_KEY, SCENE_FOREST_TEMPLE },
     { RG_FIRE_TEMPLE_SMALL_KEY, SCENE_FIRE_TEMPLE },
     { RG_WATER_TEMPLE_SMALL_KEY, SCENE_WATER_TEMPLE },
@@ -2203,9 +2113,8 @@ static constexpr std::pair<RandomizerGet, SceneID> dungeonSceneTable[] = {
     { RG_TREASURE_GAME_SMALL_KEY, SCENE_TREASURE_BOX_SHOP },
     { RG_TREASURE_GAME_KEY_RING, SCENE_TREASURE_BOX_SHOP }
 };
-const std::array<SceneID, RG_MAX> Logic::RandoGetToDungeonScene = ToRandoGetArray(dungeonSceneTable, SCENE_ID_MAX);
 
-static constexpr std::pair<RandomizerGet, uint32_t> questItemTable[] = {
+std::map<uint32_t, uint32_t> Logic::RandoGetToQuestItem = {
     { RG_FOREST_MEDALLION, QUEST_MEDALLION_FOREST },
     { RG_FIRE_MEDALLION, QUEST_MEDALLION_FIRE },
     { RG_WATER_MEDALLION, QUEST_MEDALLION_WATER },
@@ -2230,7 +2139,6 @@ static constexpr std::pair<RandomizerGet, uint32_t> questItemTable[] = {
     { RG_STONE_OF_AGONY, QUEST_STONE_OF_AGONY },
     { RG_GERUDO_MEMBERSHIP_CARD, QUEST_GERUDO_CARD },
 };
-const std::array<uint32_t, RG_MAX> Logic::RandoGetToQuestItem = ToRandoGetArray(questItemTable);
 
 std::map<uint32_t, uint32_t> BottleRandomizerGetToItemID = {
     { RG_BOTTLE_WITH_RED_POTION, ITEM_POTION_RED },
@@ -2296,11 +2204,10 @@ std::set<RandomizerGet> StaticData::allowBottleMaskTrade = { RG_KEATON_MASK,
 
 void Logic::ApplyItemEffect(Item& item, bool state) {
     auto randoGet = item.GetRandomizerGet();
-    const uint16_t objectId = item.GetGIEntry()->objectId;
-    if (objectId == OBJECT_GI_STICK) {
+    if (item.GetGIEntry()->objectId == OBJECT_GI_STICK) {
         SetInventory(ITEM_STICK, (!state ? ITEM_NONE : ITEM_STICK));
     }
-    if (objectId == OBJECT_GI_NUTS) {
+    if (item.GetGIEntry()->objectId == OBJECT_GI_NUTS) {
         SetInventory(ITEM_NUT, (!state ? ITEM_NONE : ITEM_NUT));
     }
     switch (item.GetItemType()) {
@@ -2308,7 +2215,7 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
             switch (randoGet) {
                 case RG_STONE_OF_AGONY:
                 case RG_GERUDO_MEMBERSHIP_CARD:
-                    SetQuestItem(RandoGetToQuestItem[randoGet], state);
+                    SetQuestItem(RandoGetToQuestItem.at(randoGet), state);
                     break;
                 case RG_WEIRD_EGG:
                     SetRandoInf(RAND_INF_WEIRD_EGG, state);
@@ -2628,7 +2535,7 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
                 case RG_BACK_TOWER_KEY:
                 case RG_HYLIA_LAB_KEY:
                 case RG_FISHING_HOLE_KEY:
-                    SetRandoInf(StaticData::RandoGetToRandInf[randoGet], state);
+                    SetRandoInf(StaticData::RandoGetToRandInf.at(randoGet), state);
                     break;
                 case RG_TRIFORCE_PIECE:
                     mSaveContext->ship.quest.data.randomizer.triforcePiecesCollected += (!state ? -1 : 1);
@@ -2666,7 +2573,7 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
             if (itemRG == RG_DEKU_SHIELD || itemRG == RG_HYLIAN_SHIELD) {
                 return;
             }
-            uint32_t equipId = RandoGetToEquipFlag[itemRG];
+            uint32_t equipId = RandoGetToEquipFlag.find(itemRG)->second;
             if (!state) {
                 mSaveContext->inventory.equipment &= ~equipId;
                 if (equipId == EQUIP_FLAG_SWORD_BGS && itemRG != RG_GIANTS_KNIFE) {
@@ -2681,16 +2588,16 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
         } break;
         case ITEMTYPE_DUNGEONREWARD:
         case ITEMTYPE_SONG:
-            SetQuestItem(RandoGetToQuestItem[randoGet], state);
+            SetQuestItem(RandoGetToQuestItem.find(item.GetRandomizerGet())->second, state);
             break;
         case ITEMTYPE_MAP:
-            SetDungeonItem(DUNGEON_MAP, RandoGetToDungeonScene[randoGet], state);
+            SetDungeonItem(DUNGEON_MAP, RandoGetToDungeonScene.find(item.GetRandomizerGet())->second, state);
             break;
         case ITEMTYPE_COMPASS:
-            SetDungeonItem(DUNGEON_COMPASS, RandoGetToDungeonScene[randoGet], state);
+            SetDungeonItem(DUNGEON_COMPASS, RandoGetToDungeonScene.find(item.GetRandomizerGet())->second, state);
             break;
         case ITEMTYPE_BOSSKEY:
-            SetDungeonItem(DUNGEON_KEY_BOSS, RandoGetToDungeonScene[randoGet], state);
+            SetDungeonItem(DUNGEON_KEY_BOSS, RandoGetToDungeonScene.find(item.GetRandomizerGet())->second, state);
             break;
         case ITEMTYPE_SILVER: {
             auto randoGet = item.GetRandomizerGet();
@@ -2715,7 +2622,7 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
         case ITEMTYPE_SMALLKEY: {
             auto randoGet = item.GetRandomizerGet();
             auto keyring = randoGet >= RG_FOREST_TEMPLE_KEY_RING && randoGet <= RG_TREASURE_GAME_KEY_RING;
-            auto dungeonIndex = RandoGetToDungeonScene[randoGet];
+            auto dungeonIndex = RandoGetToDungeonScene.find(randoGet)->second;
             auto count = GetSmallKeyCount(dungeonIndex);
             if (!state) {
                 if (keyring) {
@@ -2743,7 +2650,7 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
             RandomizerGet itemRG = item.GetRandomizerGet();
             if (itemRG == RG_BUY_HYLIAN_SHIELD || itemRG == RG_BUY_DEKU_SHIELD || itemRG == RG_BUY_GORON_TUNIC ||
                 itemRG == RG_BUY_ZORA_TUNIC) {
-                uint32_t equipId = RandoGetToEquipFlag[itemRG];
+                uint32_t equipId = RandoGetToEquipFlag.find(itemRG)->second;
                 if (!state) {
                     mSaveContext->inventory.equipment &= ~equipId;
                 } else {
@@ -2926,12 +2833,10 @@ void Logic::InitSaveContext() {
 }
 
 void Logic::NewSaveContext() {
-    // Reuse save context instead of allocating new one every reset
-    if (mSaveContext == nullptr || mSaveContext == &gSaveContext) {
-        mSaveContext = new SaveContext();
-    } else {
-        *mSaveContext = SaveContext();
+    if (mSaveContext != nullptr && mSaveContext != &gSaveContext) {
+        delete mSaveContext;
     }
+    mSaveContext = new SaveContext();
     InitSaveContext();
 }
 
@@ -3094,9 +2999,7 @@ bool Logic::DMCUpperToPots() {
 
 bool Logic::DMCPotsToPad() {
     return CanUse(RG_HOVER_BOOTS) || (BunnyHood() && (IsAdult || HasItem(RG_CLIMB))) || CanUse(RG_HOOKSHOT) ||
-           CanMegajump() ||
-           (IsAdult && ((CanShield() && ctx->GetTrickOption(RT_DMC_BOLERO_JUMP) && HasItem(RG_POWER_BRACELET)) ||
-                        (HasItem(RG_CLIMB) && CanMidairDamageBoost())));
+           (IsAdult && CanShield() && ctx->GetTrickOption(RT_DMC_BOLERO_JUMP) && CanUse(RG_POWER_BRACELET));
 }
 
 bool Logic::DMCPadToPots() {
@@ -3104,42 +3007,9 @@ bool Logic::DMCPadToPots() {
            CanUse(RG_HOOKSHOT) || (IsAdult && BunnyHood() && HasItem(RG_CLIMB));
 }
 
-// via scarecrow or bunny megajump
+// via scarecrow
 bool Logic::DMCUpperToPad() {
-    return (TakeDamage() && ctx->GetTrickOption(RT_UNINTUITIVE_JUMPS) &&
-            ((IsAdult && ReachDistantScarecrow()) ||
-             (((IsAdult && CanMegajump(true)) || CanBombRecoilHover() || CanBunnyMegaJumpslash()) &&
-              EffectiveHealth() > 24))) ||
-           CanMegajump(true);
-}
-
-bool Logic::DMCHoverToPoH() {
-    return (ctx->GetTrickOption(RT_DMC_HOVER_BEAN_POH) && CanUse(RG_HOVER_BOOTS)) || CanMegajump() ||
-           (IsAdult &&
-            (CanMidairDamageBoost() || (CanUse(RG_BOMB_BAG) && CanUse(RG_BOMBCHU_5) && CanStandingShield())));
-}
-
-bool Logic::DMCPadToFarPlatform() {
-    // you can go this way as child easily with a bunny megajump, but not the reverse.
-    // the difference is ledge grab angles so there's probably some way to make it
-    return (IsAdult && (ReachDistantScarecrow() || CanBombRecoilHover())) || CanMegajump(true);
-}
-
-// adult + hookshot may be unintuitive
-bool Logic::ForestMQNEToNWViaWell() {
-    return (((HasItem(RG_CLIMB) && (Get(LOGIC_FOREST_DRAINED_WELL) || HasItem(RG_BRONZE_SCALE))) ||
-             (IsAdult && CanUse(RG_HOOKSHOT)) || CanUse(RG_LONGSHOT)) &&
-            (Get(LOGIC_FOREST_DRAINED_WELL) || (CanUse(RG_IRON_BOOTS) && WaterTimer() >= 16))) ||
-           (HasItem(RG_GOLDEN_SCALE) && HasItem(RG_CLIMB) && WaterTimer() >= 16);
-}
-
-bool Logic::ForestMQNWToNEViaWell() {
-    return HasItem(RG_CLIMB) &&
-           (Get(LOGIC_FOREST_DRAINED_WELL) ||
-            (WaterTimer() >= 16 &&
-             (HasItem(RG_GOLDEN_SCALE) ||
-              (HasItem(RG_BRONZE_SCALE) && (CanUse(RG_IRON_BOOTS) || CanUse(RG_LONGSHOT) ||
-                                            (ctx->GetTrickOption(RT_FOREST_WELL_SWIM) && CanUse(RG_HOOKSHOT)))))));
+    return IsAdult && TakeDamage() && ctx->GetTrickOption(RT_UNINTUITIVE_JUMPS) && ReachDistantScarecrow();
 }
 
 bool Logic::SpiritExplosiveKeyLogic() {
@@ -3147,8 +3017,8 @@ bool Logic::SpiritExplosiveKeyLogic() {
 }
 
 bool Logic::SpiritWestToSkull() {
-    return (IsAdult && (ctx->GetTrickOption(RT_SPIRIT_STATUE_JUMP) || BunnyHood())) || CanUse(RG_HOVER_BOOTS) ||
-           ReachScarecrow() || CanMegajump();
+    return (IsAdult && (ctx->GetTrickOption(RT_SPIRIT_STATUE_JUMP) || logic->BunnyHood())) || CanUse(RG_HOVER_BOOTS) ||
+           ReachScarecrow();
 }
 
 bool Logic::SpiritSunBlockSouthLedge() {
@@ -3161,13 +3031,13 @@ bool Logic::SpiritSunBlockSouthLedge() {
 }
 
 bool Logic::SpiritEastToSwitch() {
-    return (IsAdult && (ctx->GetTrickOption(RT_SPIRIT_STATUE_JUMP) || BunnyHood())) || CanUse(RG_HOVER_BOOTS) ||
-           ((CanUse(RG_ZELDAS_LULLABY) && CanUse(RG_HOOKSHOT)) || CanMegajump());
+    return (IsAdult && (ctx->GetTrickOption(RT_SPIRIT_STATUE_JUMP) || logic->BunnyHood())) || CanUse(RG_HOVER_BOOTS) ||
+           (CanUse(RG_ZELDAS_LULLABY) && CanUse(RG_HOOKSHOT));
 }
 
 // Combines crossing the ledge directly and the jump from the hand
 bool Logic::MQSpiritWestToPots() {
-    return (IsAdult && (ctx->GetTrickOption(RT_SPIRIT_STATUE_JUMP) || BunnyHood())) || CanUse(RG_HOVER_BOOTS) ||
+    return (IsAdult && (ctx->GetTrickOption(RT_SPIRIT_STATUE_JUMP) || logic->BunnyHood())) || CanUse(RG_HOVER_BOOTS) ||
            CanUse(RG_SONG_OF_TIME);
 }
 
@@ -3187,7 +3057,7 @@ bool Logic::MQSpirit4KeyColossus() {
     // We only need 4 keys and the ability to reach both hands for adult to logically be able to drop down onto Desert
     // Colossus This is because there are only 3 keys that can be wasted without opening up either this lock to East
     // hand, or the West Hand lock through Sun Block Room and both directions allow you to drop onto colossus
-    // CanKillEnemy(RE_FLOORMASTER) is implied
+    // logic->CanKillEnemy(RE_FLOORMASTER) is implied
     return CanAvoidEnemy(RE_BEAMOS, ED_CLOSE, true, 4) && CanUse(RG_SONG_OF_TIME) && CanJumpslash() &&
            (HasItem(RG_POWER_BRACELET) || SunlightArrows()) &&
            (ctx->GetTrickOption(RT_LENS_SPIRIT_MQ) || CanUse(RG_LENS_OF_TRUTH)) && CanKillEnemy(RE_IRON_KNUCKLE) &&
@@ -3221,18 +3091,6 @@ bool Logic::OuterWestHandLogic() {
 
 bool Logic::OuterWestHandMQLogic() {
     return MQSpiritStatueToSunBlock() && SmallKeys(SCENE_SPIRIT_TEMPLE, CouldMQSpirit4KeyWestHand() ? 4 : 7);
-}
-
-bool Logic::SpiritHandToArch() {
-    if (!((CanJumpslash() && CanMegajump(true) && EffectiveHealth() > 24) || CanBunnyMegaJumpslash())) {
-        return false;
-    }
-    if (ctx->GetDungeon(SPIRIT_TEMPLE)->IsMQ()) {
-        return CanHitSwitch() && OuterWestHandMQLogic() && (HasItem(RG_CLIMB) || CanUse(RG_LONGSHOT)) &&
-               HasItem(RG_POWER_BRACELET);
-    } else {
-        return OuterWestHandLogic();
-    }
 }
 
 bool Logic::StatueRoomMQKeyLogic() {

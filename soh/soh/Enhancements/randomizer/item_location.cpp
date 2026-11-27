@@ -76,7 +76,7 @@ void ItemLocation::MergeAreas(std::set<RandomizerArea> newAreas) {
     }
 }
 
-const std::set<RandomizerArea>& ItemLocation::GetAreas() const {
+std::set<RandomizerArea> ItemLocation::GetAreas() const {
     return areas;
 }
 

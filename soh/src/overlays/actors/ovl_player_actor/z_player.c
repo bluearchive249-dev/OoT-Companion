@@ -23,11 +23,10 @@
 #include <soh/Enhancements/custom-message/CustomMessageTypes.h>
 #include "soh/Enhancements/game-interactor/vanilla-behavior/GIVanillaBehavior.h"
 #include "soh/Enhancements/item-tables/ItemTableTypes.h"
+#include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
+#include "soh/Enhancements/enhancementTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
-#include "soh/Enhancements/ExtraModes/PlayAsGanondorf.h"
-#include "soh/Enhancements/ExtraModes/GanondorfInvasion.h"
-#include "soh/Enhancements/Items/BeamosBlaster.h"
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
 #include "soh/Enhancements/randomizer/randomizer_grotto.h"
 #include "soh/frame_interpolation.h"
@@ -145,9 +144,6 @@ s32 Player_UpperAction_Sword(Player* this, PlayState* play);
 s32 func_80834B5C(Player* this, PlayState* play);
 s32 func_80834C74(Player* this, PlayState* play);
 s32 func_8083501C(Player* this, PlayState* play);
-s32 func_80834D2C(Player* this, PlayState* play);
-s32 Player_UpperAction_GunStance(Player* this, PlayState* play);
-s32 func_80834EB8(Player* this, PlayState* play);
 s32 func_808351D4(Player* this, PlayState* play); // Arrow nocked
 s32 func_808353D8(Player* this, PlayState* play); // Aiming in first person
 s32 func_80835588(Player* this, PlayState* play);
@@ -530,26 +526,6 @@ static PlayerAgeProperties sAgeProperties[] = {
         { &gPlayerAnim_clink_normal_climb_endBR, &gPlayerAnim_clink_normal_climb_endBL }, // unk_CC
     },
 };
-
-// SoH: "Play as Ganondorf", he's much taller than Link, so he reaches and hauls himself onto higher ledges: ledges are
-// looked for up to 200 units up (Link: 111), he steps or pulls himself up onto anything under 160 (Link: 79.4; above
-// that Link jumps for the ledge), and the high step starts at 95 (Link: 59). Not while swimming.
-static s32 Player_GdfTallLedges(Player* this) {
-    return (gPlayState != NULL) && !(this->stateFlags1 & PLAYER_STATE1_IN_WATER) &&
-           PlayAsGanondorf_ShouldHideLink(gPlayState, this);
-}
-
-static f32 Player_LedgeCheckHeight(Player* this) {
-    return Player_GdfTallLedges(this) ? 200.0f : this->ageProperties->unk_0C;
-}
-
-static f32 Player_LedgeJumpHeight(Player* this) {
-    return Player_GdfTallLedges(this) ? 160.0f : this->ageProperties->unk_14;
-}
-
-static f32 Player_LedgeHighStepHeight(Player* this) {
-    return Player_GdfTallLedges(this) ? 95.0f : this->ageProperties->unk_18;
-}
 
 static u32 sNoclipEnabled = false;
 static f32 sControlStickMagnitude = 0.0f;
@@ -1635,10 +1611,6 @@ void Player_AnimPlayOnceAdjusted(PlayState* play, Player* this, LinkAnimationHea
 }
 
 void Player_ApplyYawFromAnim(Player* this) {
-    // Blending big turn squishes model, skip it
-    if (ABS(this->skelAnime.jointTable[1].y) > 0x4000) {
-        FrameInterpolation_DontInterpolateChild(&this->actor);
-    }
     this->actor.shape.rot.y += this->skelAnime.jointTable[1].y;
     this->skelAnime.jointTable[1].y = 0;
 }
@@ -1787,11 +1759,6 @@ void Player_PlayFloorSfxByAge(Player* this, u16 sfxId) {
 
 void Player_PlaySteppingSfx(Player* this, f32 pitchAdjustment) {
     s32 sfxId;
-
-    // SoH: "Play as Ganondorf", his own feet make the sound (z_boss_ganon.c)
-    if (PlayAsGanondorf_OwnsFootsteps(this)) {
-        return;
-    }
 
     if (this->currentBoots == PLAYER_BOOTS_IRON) {
         sfxId = NA_SE_PL_WALK_HEAVYBOOTS;
@@ -2355,11 +2322,6 @@ void Player_InitItemAction(PlayState* play, Player* this, s8 itemAction) {
 
     sItemActionInitFuncs[itemAction](play, this);
 
-    if (BeamosBlaster_IsGunAction(itemAction)) {
-        // Aiming (like the bow) cancels itself unless this flag is set, see func_8084FA54 / func_8083AD4C.
-        this->stateFlags1 |= PLAYER_STATE1_ITEM_IN_HAND;
-    }
-
     Player_SetModelGroup(this, this->modelGroup);
 }
 
@@ -2707,12 +2669,9 @@ s32 func_8083442C(Player* this, PlayState* play) {
         this->unk_834 = 14;
 
         if (this->unk_860 >= 0) {
-            if (!BeamosBlaster_IsGunAction(this->heldItemAction)) {
-                Player_PlaySfx(this, D_80854398[ABS(this->unk_860) - 1]);
-            }
+            Player_PlaySfx(this, D_80854398[ABS(this->unk_860) - 1]);
 
-            if (!Player_HoldsHookshot(this) && !BeamosBlaster_IsGunAction(this->heldItemAction) &&
-                (func_80834380(play, this, &item, &arrowType) > 0)) {
+            if (!Player_HoldsHookshot(this) && (func_80834380(play, this, &item, &arrowType) > 0)) {
                 magicArrowType = arrowType - ARROW_FIRE;
 
                 if (this->unk_860 >= 0) {
@@ -2851,64 +2810,9 @@ s32 func_8083499C(Player* this, PlayState* play) {
 s32 Player_UpperAction_Sword(Player* this, PlayState* play) {
     if (func_80834758(play, this) || func_8083499C(this, play)) {
         return true;
+    } else {
+        return false;
     }
-
-    if (BeamosBlaster_IsGunAction(this->heldItemAction) && (this->doorType == PLAYER_DOORTYPE_NONE) &&
-        !(this->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN)) {
-        if (BeamosBlaster_WantsAim() && !(this->stateFlags1 & PLAYER_STATE1_IN_WATER)) {
-            // Held B: raise the gun and aim exactly like the bow (first person / Z-target aim, release to fire).
-            this->unk_860 = 1;
-            if (func_80834D2C(this, play)) {
-                func_80834EB8(this, play);
-                return true;
-            }
-        } else if (BeamosBlaster_ConsumeHipFire()) {
-            // Quick tap of B: fire from the hip without aiming. Link stands in a gun-gripping stance for a moment.
-            BeamosBlaster_Fire(play, this);
-            BeamosBlaster_StartStance();
-            Player_SetUpperActionFunc(this, Player_UpperAction_GunStance);
-            LinkAnimation_PlayOnce(play, &this->upperSkelAnime, &gPlayerAnim_link_bow_bow_ready);
-            return true;
-        }
-    }
-
-    return false;
-}
-
-/**
- * Beamos Blaster: the short standing stance after a hip-fire tap. The upper body holds the bow-ready pose (the arms are
- * re-posed for a two-handed grip while drawing), and a new tap keeps shooting from it.
- */
-s32 Player_UpperAction_GunStance(Player* this, PlayState* play) {
-    if (func_80834758(play, this) || func_8083499C(this, play)) {
-        return true;
-    }
-
-    LinkAnimation_Update(play, &this->upperSkelAnime);
-
-    if (BeamosBlaster_WantsAim() && !(this->stateFlags1 & PLAYER_STATE1_IN_WATER) &&
-        (this->doorType == PLAYER_DOORTYPE_NONE)) {
-        this->unk_860 = 1;
-        if (func_80834D2C(this, play)) {
-            func_80834EB8(this, play);
-            return true;
-        }
-    }
-
-    if (BeamosBlaster_ConsumeHipFire()) {
-        BeamosBlaster_Fire(play, this);
-        BeamosBlaster_StartStance();
-    }
-
-    if (BeamosBlaster_StanceActive()) {
-        return true;
-    }
-
-    // Stance is over: back to the gun's normal idle.
-    Player_SetUpperActionFunc(this, Player_UpperAction_Sword);
-    LinkAnimation_PlayLoop(play, &this->upperSkelAnime, GET_PLAYER_ANIM(PLAYER_ANIMGROUP_wait, this->modelAnimType));
-    this->idleType = PLAYER_IDLE_DEFAULT;
-    return false;
 }
 
 s32 Player_UpperAction_ChangeHeldItem(Player* this, PlayState* play) {
@@ -3062,12 +2966,6 @@ s32 func_80834FBC(Player* this) {
 }
 
 s32 func_8083501C(Player* this, PlayState* play) {
-    if (BeamosBlaster_IsGunAction(this->heldItemAction)) {
-        // Beamos Blaster: after a shot, go back to the gun's own idle upper action instead of the bow's.
-        Player_SetUpperActionFunc(this, Player_UpperAction_Sword);
-        return Player_UpperAction_Sword(this, play);
-    }
-
     if (this->unk_860 >= 0) {
         this->unk_860 = -this->unk_860;
     }
@@ -3158,9 +3056,7 @@ s32 func_808351D4(Player* this, PlayState* play) {
         Player_SetUpperActionFunc(this, func_808353D8);
         if (this->unk_860 >= 0) {
             if (sp2C == 0) {
-                if (BeamosBlaster_IsGunAction(this->heldItemAction)) {
-                    BeamosBlaster_Fire(play, this);
-                } else if (!func_808350A4(play, this)) {
+                if (!func_808350A4(play, this)) {
                     Player_PlaySfx(this, D_808543DC[ABS(this->unk_860) - 1]);
                 }
             } else if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
@@ -4826,12 +4722,6 @@ s32 func_808382DC(Player* this, PlayState* play) {
     s32 sp68 = false;
     s32 sp64;
 
-    // Invasion mode: no knockback from monsters for Ganondorf either (grabs, shoves, explosions)
-    if (GdfInvasion_ShieldedFromWorld()) {
-        this->knockbackType = PLAYER_KNOCKBACK_NONE;
-        this->shieldQuad.base.acFlags &= ~AC_BOUNCED;
-    }
-
     if (this->unk_A86 != 0) {
         if (!Player_InBlockingCsMode(play, this)) {
             Player_InflictDamageModified(play, -16 * (1 << CVarGetInteger(CVAR_ENHANCEMENT("VoidDamageMult"), 0)),
@@ -5035,7 +4925,7 @@ s32 Player_ActionHandler_12(Player* this, PlayState* play) {
     f32 sp24;
 
     if (!(this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) && (this->ledgeClimbType >= 2) &&
-        (!(this->stateFlags1 & PLAYER_STATE1_IN_WATER) || (Player_LedgeJumpHeight(this) > this->yDistToLedge))) {
+        (!(this->stateFlags1 & PLAYER_STATE1_IN_WATER) || (this->ageProperties->unk_14 > this->yDistToLedge))) {
         sp3C = 0;
 
         if (func_808332B8(this)) {
@@ -5048,7 +4938,7 @@ s32 Player_ActionHandler_12(Player* this, PlayState* play) {
                 return 0;
             }
         } else if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) ||
-                   ((Player_LedgeJumpHeight(this) <= this->yDistToLedge) &&
+                   ((this->ageProperties->unk_14 <= this->yDistToLedge) &&
                     (this->stateFlags1 & PLAYER_STATE1_IN_WATER))) {
             return 0;
         }
@@ -5071,7 +4961,7 @@ s32 Player_ActionHandler_12(Player* this, PlayState* play) {
 
             sp34 = this->yDistToLedge;
 
-            if (Player_LedgeJumpHeight(this) <= sp34) {
+            if (this->ageProperties->unk_14 <= sp34) {
                 anim = &gPlayerAnim_link_normal_250jump_start;
                 this->linearVelocity = 1.0f;
             } else {
@@ -5085,7 +4975,7 @@ s32 Player_ActionHandler_12(Player* this, PlayState* play) {
                     anim = &gPlayerAnim_link_swimer_swim_15step_up;
                     sp34 -= (60.0f * this->ageProperties->unk_08);
                     this->stateFlags1 &= ~PLAYER_STATE1_IN_WATER;
-                } else if (Player_LedgeHighStepHeight(this) <= sp34) {
+                } else if (this->ageProperties->unk_18 <= sp34) {
                     anim = &gPlayerAnim_link_normal_150step_up;
                     sp34 -= (59.0f * this->ageProperties->unk_08);
                 } else {
@@ -5559,7 +5449,6 @@ s32 Player_ActionHandler_1(Player* this, PlayState* play) {
                         if (Player_HandleExitsAndVoids(play, this, groundPoly, BGCHECK_SCENE)) {
                             gSaveContext.entranceSpeed = 2.0f;
                             gSaveContext.entranceSound = NA_SE_OC_DOOR_OPEN;
-                            PlayAsGanondorf_DelayDoorTransition(play); // SoH: Play as Ganondorf, seen going in
                         }
                     } else {
                         Camera_ChangeDoorCam(Play_GetCamera(play, CAM_ID_MAIN), doorActor,
@@ -9593,8 +9482,7 @@ void func_80843AE8(PlayState* play, Player* this) {
                     LinkAnimation_Change(play, &this->skelAnime, &gPlayerAnim_link_derth_rebirth, 1.0f, 99.0f,
                                          Animation_GetLastFrame(&gPlayerAnim_link_derth_rebirth), ANIMMODE_ONCE, 0.0f);
                 }
-                // (Invasion mode: revived by another Link, he comes back with 3 hearts)
-                gSaveContext.healthAccumulator = GdfInvasion_ReviveHealth(MAX_HEALTH);
+                gSaveContext.healthAccumulator = MAX_HEALTH;
                 this->av2.actionVar2 = -1;
             }
         } else if (gSaveContext.healthAccumulator == 0) {
@@ -9613,8 +9501,6 @@ void func_80843AE8(PlayState* play, Player* this) {
         Player_SpawnFairy(play, this, &this->actor.world.pos, &D_808545E4, FAIRY_REVIVE_DEATH);
         Player_PlaySfx(this, NA_SE_EV_FIATY_HEAL - SFX_FLAG);
         OnePointCutscene_Init(play, 9908, 125, &this->actor, CAM_ID_MAIN);
-    } else if (GdfInvasion_HoldDowned(play, this)) {
-        // Invasion mode: down, not out: another Link can revive him for a while before it's Game Over
     } else if (play->gameOverCtx.state == GAMEOVER_DEATH_WAIT_GROUND) {
         play->gameOverCtx.state = GAMEOVER_DEATH_DELAY_MENU;
     }
@@ -10260,8 +10146,8 @@ void Player_Action_80845668(Player* this, PlayState* play) {
         if (LinkAnimation_OnFrame(&this->skelAnime, 8.0f)) {
             temp1 = this->yDistToLedge;
 
-            if (temp1 > Player_LedgeCheckHeight(this)) {
-                temp1 = Player_LedgeCheckHeight(this);
+            if (temp1 > this->ageProperties->unk_0C) {
+                temp1 = this->ageProperties->unk_0C;
             }
 
             if (this->stateFlags1 & PLAYER_STATE1_IN_WATER) {
@@ -11329,17 +11215,6 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
     Math_Vec3f_Copy(&unusedWorldPos, &this->actor.world.pos);
     Actor_UpdateBgCheckInfo(play, &this->actor, vWallCheckHeight, vWallCheckRadius, ceilingCheckHeight, flags);
 
-    // Invasion mode, Aero Alchemy: the air around him is water (a surface a little above the ground under him)
-    if ((this->actor.category == ACTORCAT_PLAYER) && GdfInvasion_AeroAlchemyActive() &&
-        (this->actor.floorHeight > BGCHECK_Y_MIN + 10.0f)) {
-        f32 surface = this->actor.floorHeight + this->ageProperties->unk_2C + 30.0f;
-
-        if (surface - this->actor.world.pos.y > this->actor.yDistToWater) {
-            this->actor.yDistToWater = surface - this->actor.world.pos.y;
-            this->actor.bgCheckFlags |= BGCHECKFLAG_WATER;
-        }
-    }
-
     if (this->actor.bgCheckFlags & 0x10) {
         this->actor.velocity.y = 0.0f;
     }
@@ -11464,7 +11339,7 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
                 vLedgeCheckOffsetXZ = this->distToInteractWall + 10.0f;
                 ledgeCheckPos.x = this->actor.world.pos.x - (vLedgeCheckOffsetXZ * wallPolyNormalX);
                 ledgeCheckPos.z = this->actor.world.pos.z - (vLedgeCheckOffsetXZ * wallPolyNormalZ);
-                ledgeCheckPos.y = this->actor.world.pos.y + Player_LedgeCheckHeight(this);
+                ledgeCheckPos.y = this->actor.world.pos.y + this->ageProperties->unk_0C;
 
                 ledgePosY = BgCheck_EntityRaycastFloor1(&play->colCtx, &ledgeFloorPoly, &ledgeCheckPos);
                 yDistToLedge = ledgePosY - this->actor.world.pos.y;
@@ -11487,9 +11362,9 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
                     } else if (func_80041DE4(&play->colCtx, wallPoly, this->actor.wallBgId) == 0) {
                         if (this->ageProperties->unk_1C <= this->yDistToLedge) {
                             if (ABS(ledgeFloorPoly->normal.y) > 28000) {
-                                if (Player_LedgeJumpHeight(this) <= this->yDistToLedge) {
+                                if (this->ageProperties->unk_14 <= this->yDistToLedge) {
                                     nextLedgeClimbType = 4;
-                                } else if (Player_LedgeHighStepHeight(this) <= this->yDistToLedge) {
+                                } else if (this->ageProperties->unk_18 <= this->yDistToLedge) {
                                     nextLedgeClimbType = 3;
                                 } else {
                                     nextLedgeClimbType = 2;
@@ -12278,8 +12153,7 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
             }
 
             if (!(this->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_DAMAGED)) &&
-                (this->invincibilityTimer <= 0) && !GdfInvasion_ShieldedFromWorld()) {
-                // (Invasion mode: nothing in his own game hurts Ganondorf, only the Links do, through his Resolve)
+                (this->invincibilityTimer <= 0)) {
                 CollisionCheck_SetAC(play, &play->colChkCtx, &this->cylinder.base);
 
                 if (this->invincibilityTimer < 0) {
@@ -12360,10 +12234,6 @@ void Player_Update(Actor* thisx, PlayState* play) {
                 input.cur.button &= ~(BTN_A | BTN_B | BTN_CUP);
                 input.press.button &= ~(BTN_A | BTN_B | BTN_CUP);
             }
-            // SoH: Play as Ganondorf, his attacks replace Link's moveset
-            PlayAsGanondorf_FilterInput(play, this, &input);
-            // SoH: Play as Ganondorf, Invasion mode (his Dark Arts menu, banishment, curses on a Link)
-            GdfInvasion_FilterLinkInput(play, &input);
         }
 
         if (CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f) != 1.0f &&
@@ -12587,12 +12457,7 @@ void Player_Draw(Actor* thisx, PlayState* play2) {
 
     OPEN_DISPS(play->state.gfxCtx);
 
-    // SoH: Play as Ganondorf, Link is invisible while Ganondorf is shown (items he holds up are still drawn)
-    if (PlayAsGanondorf_ShouldHideLink(play, this)) {
-        if (this->unk_862 > 0) {
-            Player_DrawGetItem(play, this);
-        }
-    } else if (!(this->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (!(this->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         OverrideLimbDrawOpa overrideLimbDraw = Player_OverrideLimbDrawGameplayDefault;
         s32 lod;
         s32 pad;
@@ -12931,9 +12796,7 @@ void Player_Action_8084B1D8(Player* this, PlayState* play) {
     if ((this->csAction != 0) || (this->unk_6AD == 0) || (this->unk_6AD >= 4) || Player_UpdateHostileLockOn(this) ||
         (this->focusActor != NULL) || !func_8083AD4C(play, this) ||
         (((this->unk_6AD == 2) &&
-          (CHECK_BTN_ANY(sControlInput->press.button,
-                          BeamosBlaster_IsGunAction(this->heldItemAction) ? (BTN_A | BTN_R) : (BTN_A | BTN_B | BTN_R)) ||
-           Player_FriendlyLockOnOrParallel(this) ||
+          (CHECK_BTN_ANY(sControlInput->press.button, BTN_A | BTN_B | BTN_R) || Player_FriendlyLockOnOrParallel(this) ||
            (!func_8002DD78(this) && !func_808334B4(this)))) ||
          ((this->unk_6AD == 1) && CHECK_BTN_ANY(sControlInput->press.button, buttonsToCheck)))) {
         func_8083C148(this, play);
@@ -14997,13 +14860,6 @@ void Player_Action_8084FBF4(Player* this, PlayState* play) {
     }
 
     this->bodyShockTimer = 40;
-    // SoH: "Play as Ganondorf", his voice instead of Link's held scream: one cry as the shock hits
-    if (PlayAsGanondorf_ShouldHideLink(play, this)) {
-        if (this->av2.actionVar2 == 19) {
-            Player_PlayVoiceSfx(this, NA_SE_VO_LI_TAKEN_AWAY);
-        }
-        return;
-    }
     Actor_PlaySfx_Flagged2(&this->actor, NA_SE_VO_LI_TAKEN_AWAY - SFX_FLAG + this->ageProperties->unk_92);
 }
 

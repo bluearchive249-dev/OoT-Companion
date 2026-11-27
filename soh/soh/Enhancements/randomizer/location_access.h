@@ -32,6 +32,7 @@ class EventAccess {
     }
 
     bool ConditionsMet() const {
+        auto ctx = Rando::Context::GetInstance();
         if (ctx->GetOption(RSK_NO_LOGIC).Is(RO_GENERIC_OFF)) {
             return condition_function();
         }
@@ -82,6 +83,7 @@ class LocationAccess {
     }
 
     bool GetConditionsMet() const {
+        auto ctx = Rando::Context::GetInstance();
         if (ctx->GetOption(RSK_NO_LOGIC).Is(RO_GENERIC_OFF)) {
             return condition_function();
         }

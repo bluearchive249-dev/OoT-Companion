@@ -7,7 +7,7 @@
 //
 // Ruto, Malon and Zelda change with Link's age (young with child Link, grown up with adult Link). Saria doesn't age.
 // Everything is in the "Companions" section of Enhancements > Extra Modes. Numbers are tunable at runtime in
-// ganondorf_tuning.json ("companion.*" keys, see GanondorfTuning.h); lines can be added in companion_lines.json.
+// companion_tuning.json ("companion.*" keys, see CompanionTuning.h); lines can be added in companion_lines.json.
 
 #include <algorithm>
 #include <cmath>
@@ -33,8 +33,7 @@
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/ShipInit.hpp"
 #include "soh/frame_interpolation.h"
-#include "GanondorfText.h"
-#include "GanondorfTuning.h"
+#include "CompanionTuning.h"
 #include "Companions.h"
 
 extern "C" {
@@ -383,7 +382,7 @@ static CompPersona PersonaFor(int who, bool adult) {
 // Their own skeletons take Link's walk and run: each frame a hidden copy of Link's skeleton plays his walk, and how
 // far each of his leg and arm joints has turned from his standing pose is added to the same joint of hers (limbs
 // from the game's asset lists, object_*.yml). Order: left thigh, shin, foot; right thigh, shin, foot; left shoulder,
-// arm; right shoulder, arm (0: none). Live in ganondorf_tuning.json: "companion.<persona>.walk_map" (10 numbers),
+// arm; right shoulder, arm (0: none). Live in companion_tuning.json: "companion.<persona>.walk_map" (10 numbers),
 // "companion.<persona>.walk_sign" [legs, arms] (1 or -1), "companion.walk_mix".
 static const u8 sLinkLimbs[10] = { 7, 8, 9, 4, 5, 6, 14, 15, 17, 18 };
 static const u8 sWalkMap[P_COUNT][10] = {
@@ -406,7 +405,7 @@ static const char* sHugAnim[P_COUNT] = {
     OTR("object_zl4", "gChildZeldaAnim_01910C"),
     OTR("object_zl2_anime2", "gZelda2Anime2Anim_008050"),
 };
-// Link's side: arms forward (ganondorf_tuning.json "companion.hug_link_anim": 0-3)
+// Link's side: arms forward (companion_tuning.json "companion.hug_link_anim": 0-3)
 static const char* sLinkHugAnims[] = {
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_push_wait",
     "__OTR__objects/gameplay_keep/gPlayerAnim_link_demo_kakeyori_wait",
@@ -986,7 +985,7 @@ static bool WhoOn(int who) {
 }
 
 static f32 Tune(const char* key, f32 def) {
-    return GdfTune((std::string("companion.") + key).c_str(), def);
+    return CompTune((std::string("companion.") + key).c_str(), def);
 }
 
 static std::string Pick(const Lines& l) {
@@ -2017,11 +2016,11 @@ static s32 Comp_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Ve
             pos->y += (f32)(c->puppetJoints[0].y - c->restJoints[0].y) * mix * Tune("walk_bob", 0.6f);
         }
         for (int i = 0; i < 10; i++) {
-            int limb = (int)GdfTuneAt((k + ".walk_map").c_str(), i, sWalkMap[c->persona][i]);
+            int limb = (int)CompTuneAt((k + ".walk_map").c_str(), i, sWalkMap[c->persona][i]);
             if ((limb == 0) || (limb != limbIndex)) {
                 continue;
             }
-            f32 sign = GdfTuneAt((k + ".walk_sign").c_str(), (i < 6) ? 0 : 1, 1.0f);
+            f32 sign = CompTuneAt((k + ".walk_sign").c_str(), (i < 6) ? 0 : 1, 1.0f);
             const Vec3s& a = c->puppetJoints[sLinkLimbs[i]];
             const Vec3s& b = c->restJoints[sLinkLimbs[i]];
             rot->x = (s16)(rot->x + (s16)((f32)(s16)(a.x - b.x) * mix * sign));
@@ -2129,7 +2128,7 @@ static void OnOpenText(uint16_t* textId, bool* loadFromMessageTable) {
         // (one short box, then the two choices)
         t += "\x1B&%gTalk&Hug%w";
     }
-    CustomMessage msg = CustomMessage(prompt ? t : GdfFitBoxes(t.c_str()), TEXTBOX_TYPE_BLACK, TEXTBOX_POS_BOTTOM);
+    CustomMessage msg = CustomMessage(t, TEXTBOX_TYPE_BLACK, TEXTBOX_POS_BOTTOM);
     msg.AutoFormat();
     msg.LoadIntoFont();
     *loadFromMessageTable = false;

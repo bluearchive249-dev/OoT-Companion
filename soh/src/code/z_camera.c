@@ -10,11 +10,6 @@
 #include "soh/Enhancements/controls/Mouse.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/savestate_serialize.h"
-#include "soh/Enhancements/ExtraModes/PlayAsGanondorf.h"
-
-// SoH: "Play as Ganondorf". Every camera mode scales its distance and height from the player's height, so the
-// camera asks for Ganondorf's height instead while he's shown (Link's height otherwise).
-#define Player_GetHeight(player) PlayAsGanondorf_GetCameraHeight(player)
 
 s16 Camera_ChangeSettingFlags(Camera* camera, s16 setting, s16 flags);
 s32 Camera_RequestModeImpl(Camera* camera, s16 requestedMode, u8 forceModeChange);
@@ -4356,8 +4351,6 @@ s32 Camera_Subj3(Camera* camera) {
     f32 playerHeight;
 
     Actor_GetFocus(&sp60, &camera->player->actor);
-    // SoH: Play as Ganondorf, looking around in first person sees from his eyes
-    PlayAsGanondorf_GetFirstPersonEye(camera->player, &sp60.pos);
     playerHeight = Player_GetHeight(camera->player);
 
     if (camera->play->view.unk_124 == 0) {
@@ -7714,12 +7707,6 @@ Vec3s Camera_Update(Camera* camera) {
         OLib_Vec3fDiffToVecSphGeo(&eyeAtAngle, &viewEye, &viewAt);
         Camera_CalcUpFromPitchYawRoll(&viewUp, eyeAtAngle.pitch, eyeAtAngle.yaw, camera->roll);
         viewFov = camera->fov;
-    }
-
-    // SoH: "Play as Ganondorf", young Link's cutscenes and conversations: shots of him raised to Ganondorf's height
-    if (PlayAsGanondorf_AdjustCutsceneView(camera, &viewEye, &viewAt)) {
-        OLib_Vec3fDiffToVecSphGeo(&eyeAtAngle, &viewEye, &viewAt);
-        Camera_CalcUpFromPitchYawRoll(&viewUp, eyeAtAngle.pitch, eyeAtAngle.yaw, camera->roll);
     }
 
     if (camera->paramFlags & 4) {

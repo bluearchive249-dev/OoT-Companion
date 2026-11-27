@@ -1,6 +1,4 @@
 #include "global.h"
-#include "soh/Enhancements/ExtraModes/GanondorfInvasion.h"
-#include "soh/Enhancements/ExtraModes/PlayAsGanondorf.h"
 #include "vt.h"
 #include "textures/parameter_static/parameter_static.h"
 #include "textures/do_action_static/do_action_static.h"
@@ -27,7 +25,6 @@
 
 #include "message_data_static.h"
 #include <libultraship/bridge/consolevariablebridge.h>
-#include "soh/Enhancements/ExtraModes/GanondorfHud.h"
 extern MessageTableEntry* sNesMessageEntryTablePtr;
 extern MessageTableEntry* sGerMessageEntryTablePtr;
 extern MessageTableEntry* sFraMessageEntryTablePtr;
@@ -2778,114 +2775,6 @@ void func_80086D5C(s32* buf, u16 size) {
     }
 }
 
-// SoH: "Play as Ganondorf", where A would attack, jump or put away, holding it makes him sprint: the A button reads
-// "Run" (IA4, 48x16, drawn in the style of the game's action labels)
-// SoH: "Play as Ganondorf", his B button's icons (GanondorfHudIcons.c) and his mode (z_boss_ganon.c)
-extern u8 gGdfBIconLightTex[];
-extern u8 gGdfBIconTridentTex[];
-extern u8 gGdfBIconAuraTex[];
-s32 BossGanon_Player_BMode(void);
-
-// SoH: "Play as Ganondorf": the fists stance's B button, "Punch" in the game's own lettering: its letters taken from
-// the game's own button labels (P and u of "Put Away", n of "Enter", c and h of "Check"), put together once
-static u8* Interface_GdfPunchIcon(void) {
-    static const struct {
-        const char* tex;
-        s8 from; // its columns in that 48x16 label (each letter's outline column shared with the next)
-        s8 to;
-    } sLetters[] = {
-        { gPutAwayDoActionENGTex, 6, 11 }, { gPutAwayDoActionENGTex, 11, 16 }, { gEnterDoActionENGTex, 17, 22 },
-        { gCheckDoActionENGTex, 26, 31 },  { gCheckDoActionENGTex, 16, 21 },
-    };
-    static u64 sIconWords[32 * 32 * 4 / 8]; // (8-byte aligned)
-    u8* sIcon = (u8*)sIconWords;
-    static u8 sBuilt = false;
-    u8 nib[16][32];
-    s32 x = 0;
-    s32 width = -(s32)ARRAY_COUNT(sLetters) + 1;
-    s32 i;
-    s32 r;
-    s32 c;
-
-    if (sBuilt) {
-        return sIcon;
-    }
-    memset(nib, 0, sizeof(nib));
-    for (i = 0; i < ARRAY_COUNT(sLetters); i++) {
-        width += sLetters[i].to - sLetters[i].from + 1;
-    }
-    x = (32 - width) / 2;
-    for (i = 0; i < ARRAY_COUNT(sLetters); i++) {
-        const char* path = sLetters[i].tex;
-        u8* data;
-
-        if (strncmp(path, "__OTR__", 7) == 0) {
-            path += 7;
-        }
-        data = (u8*)ResourceMgr_LoadTexOrDListByName(path);
-        if (data == NULL) {
-            return gGdfBIconLightTex;
-        }
-        for (c = sLetters[i].from; c <= sLetters[i].to; c++) {
-            for (r = 0; r < 16; r++) {
-                s32 at = r * 48 + c;
-                u8 v = (at & 1) ? (data[at / 2] & 0xF) : (data[at / 2] >> 4);
-                u8* to = &nib[r][x + c - sLetters[i].from];
-
-                // (its edge columns are only the outline, and only beside the letter: not its neighbours' strokes)
-                if ((c == sLetters[i].from) || (c == sLetters[i].to)) {
-                    s32 in = r * 48 + ((c == sLetters[i].from) ? (c + 1) : (c - 1));
-                    u8 w = (in & 1) ? (data[in / 2] & 0xF) : (data[in / 2] >> 4);
-
-                    v = v & w & 1;
-                }
-                *to = MAX(*to, v);
-            }
-        }
-        x += sLetters[i].to - sLetters[i].from;
-    }
-    memset(sIcon, 0, sizeof(sIcon));
-    for (r = 0; r < 16; r++) {
-        for (c = 0; c < 32; c++) {
-            u8* px = &sIcon[((r + 8) * 32 + c) * 4];
-            u8 inten = (nib[r][c] >> 1) * 255 / 7;
-
-            px[0] = px[1] = px[2] = inten;
-            px[3] = (nib[r][c] & 1) ? 255 : 0;
-        }
-    }
-    sBuilt = true;
-    return sIcon;
-}
-u8* GanondorfTrident_GetBIcon(void); // GanondorfTrident.cpp
-
-static u8 sGdfRunDoActionTex[] ALIGNED8 = {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x11, 0x11, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xFF,
-    0xFF, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xFF, 0x1F, 0xF1, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
-    0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xFF,
-    0x1F, 0xF1, 0x1F, 0xF1, 0xFF, 0x11, 0xFF, 0xFF, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xFF, 0x1F, 0xF1, 0x1F, 0xF1, 0xFF, 0x11, 0xFF, 0xFF,
-    0xF1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xFF,
-    0xFF, 0x11, 0x1F, 0xF1, 0xFF, 0x11, 0xFF, 0x1F, 0xF1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xFF, 0xF1, 0x11, 0x1F, 0xF1, 0xFF, 0x11, 0xFF, 0x1F,
-    0xF1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xFF,
-    0x1F, 0x11, 0x1F, 0xF1, 0xFF, 0x11, 0xFF, 0x1F, 0xF1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xFF, 0x1F, 0xF1, 0x1F, 0xF1, 0xFF, 0x11, 0xFF, 0x1F,
-    0xF1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xFF,
-    0x1F, 0xF1, 0x1F, 0xFF, 0xFF, 0x11, 0xFF, 0x1F, 0xF1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xFF, 0x1F, 0xF1, 0x11, 0xFF, 0xFF, 0x11, 0xFF, 0x1F,
-    0xF1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x11,
-    0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-};
-
 void Interface_LoadActionLabel(InterfaceContext* interfaceCtx, u16 action, s16 loadOffset) {
     static void* sDoActionTextures[] = { gAttackDoActionENGTex, gCheckDoActionENGTex };
     if (action >= DO_ACTION_MAX) {
@@ -2916,10 +2805,6 @@ void Interface_LoadActionLabel(InterfaceContext* interfaceCtx, u16 action, s16 l
 
     char* segment = interfaceCtx->doActionSegment[loadOffset];
     interfaceCtx->doActionSegment[loadOffset] = action != DO_ACTION_NONE ? doAction : gEmptyTexture;
-    if (((action == DO_ACTION_ATTACK) || (action == DO_ACTION_JUMP) || (action == DO_ACTION_PUTAWAY)) &&
-        PlayAsGanondorf_ARuns()) {
-        interfaceCtx->doActionSegment[loadOffset] = (char*)sGdfRunDoActionTex;
-    }
     gSegments[7] = interfaceCtx->doActionSegment[loadOffset];
 }
 
@@ -2946,12 +2831,12 @@ void Interface_SetNaviCall(PlayState* play, u16 naviCallState) {
         (play->csCtx.state == CS_STATE_IDLE)) {
         if (!CVarGetInteger(CVAR_AUDIO("DisableNaviCallAudio"), 0)) {
             // clang-format off
-            if (naviCallState == 0x1E) { Audio_PlaySfxGeneral(PlayAsGanondorf_GetNaviSfx(NA_SE_VO_NAVY_CALL), &gSfxDefaultPos, 4,
+            if (naviCallState == 0x1E) { Audio_PlaySfxGeneral(NA_SE_VO_NAVY_CALL, &gSfxDefaultPos, 4,
                                                                 &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb); }
             // clang-format on
 
             if (naviCallState == 0x1D) {
-                func_800F4524(&gSfxDefaultPos, PlayAsGanondorf_GetNaviSfx(NA_SE_VO_NA_HELLO_2), 32);
+                func_800F4524(&gSfxDefaultPos, NA_SE_VO_NA_HELLO_2, 32);
             }
         }
 
@@ -3562,53 +3447,6 @@ void Interface_DrawLineupTick(PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-static const char sGdfTitleFlameTex[] = "__OTR__objects/object_mag/gTitleFlameEffectTex";
-
-// SoH: "Play as Ganondorf", the title logo's flames (the same scrolling flame texture and combiner) around the magic
-// meter, in red and gold
-static void Interface_DrawGanondorfMagicFlames(PlayState* play, s16 barX, s16 barY) {
-    InterfaceContext* interfaceCtx = &play->interfaceCtx;
-    s32 maskWidth;
-    s32 maskHeight;
-    const u8* mask = GanondorfHud_GetBarFlameMask(gSaveContext.magicCapacity, &maskWidth, &maskHeight);
-    s32 left = barX - GDF_BAR_FLAME_PAD_X;
-    s32 top = barY - GDF_BAR_FLAME_PAD_TOP;
-    s32 scroll = (play->gameplayFrames * -3) & 0x7F;
-    // The flames flare up while magic is being spent and settle to a steady burn otherwise
-    f32 flare = (gSaveContext.magicState == MAGIC_STATE_CONSUME || gSaveContext.magicState == MAGIC_STATE_METER_FLASH_1 ||
-                 gSaveContext.magicState == MAGIC_STATE_METER_FLASH_2 ||
-                 gSaveContext.magicState == MAGIC_STATE_METER_FLASH_3)
-                    ? 1.0f
-                    : 0.0f;
-    s32 lodFrac = (s32)(96.0f + 14.0f * Math_SinS(play->gameplayFrames * 0x0900) - 30.0f * flare);
-
-    if (mask == NULL) {
-        return;
-    }
-
-    OPEN_DISPS(play->state.gfxCtx);
-
-    Gfx_SetupDL_39Overlay(play->state.gfxCtx);
-    gDPSetCycleType(OVERLAY_DISP++, G_CYC_2CYCLE);
-    gDPSetAlphaCompare(OVERLAY_DISP++, G_AC_THRESHOLD);
-    gDPSetRenderMode(OVERLAY_DISP++, G_RM_PASS, G_RM_CLD_SURF2);
-    gDPSetCombineLERP(OVERLAY_DISP++, TEXEL1, PRIMITIVE, PRIM_LOD_FRAC, TEXEL0, TEXEL1, 1, PRIM_LOD_FRAC, TEXEL0,
-                      PRIMITIVE, ENVIRONMENT, COMBINED, ENVIRONMENT, COMBINED, 0, PRIMITIVE, 0);
-    gDPSetPrimColor(OVERLAY_DISP++, 0, lodFrac, 255, 190, 60, interfaceCtx->magicAlpha);
-    gDPSetEnvColor(OVERLAY_DISP++, 200, 0, 0, 255);
-    gDPLoadMultiTile(OVERLAY_DISP++, mask, 0x0000, G_TX_RENDERTILE, G_IM_FMT_I, G_IM_SIZ_8b, maskWidth, maskHeight, 0, 0,
-                     maskWidth - 1, maskHeight - 1, 0, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP,
-                     G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
-    gDPLoadMultiBlock(OVERLAY_DISP++, sGdfTitleFlameTex, 0x0100, 1, G_IM_FMT_I, G_IM_SIZ_8b, 32, 32, 0,
-                      G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, 5, 5, G_TX_NOLOD, G_TX_NOLOD);
-    gDPSetTileSize(OVERLAY_DISP++, 1, 0, scroll, 31 << 2, (31 << 2) + scroll);
-    gSPWideTextureRectangle(OVERLAY_DISP++, left << 2, top << 2, (left + maskWidth) << 2, (top + maskHeight) << 2,
-                            G_TX_RENDERTILE, 0, 0, 1 << 10, 1 << 10);
-    gDPPipeSync(OVERLAY_DISP++);
-
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
 void Interface_DrawMagicBar(PlayState* play) {
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
     s16 magicDrop = R_MAGIC_BAR_LARGE_Y - R_MAGIC_BAR_SMALL_Y + 2;
@@ -3624,13 +3462,6 @@ void Interface_DrawMagicBar(PlayState* play) {
         magicbar_green = CVarGetColor24(CVAR_COSMETIC("Consumable.Magic.Value"), magicbar_green);
     }
     GameInteractor_Should(VB_APPLY_MAGIC_METER_FILL_COLOR, true, &magicbar_green);
-
-    // SoH: "Play as Ganondorf", his magic burns red
-    if (PlayAsGanondorf_UseGanondorfHud()) {
-        magicbar_green.r = 235;
-        magicbar_green.g = 30;
-        magicbar_green.b = 10;
-    }
 
     OPEN_DISPS(play->state.gfxCtx);
 
@@ -3719,11 +3550,6 @@ void Interface_DrawMagicBar(PlayState* play) {
             rMagicFillX = rMagicFillX_original;
         }
 
-        // SoH: "Play as Ganondorf", the title screen's flames burn around his magic meter
-        if (PlayAsGanondorf_UseGanondorfHud()) {
-            Interface_DrawGanondorfMagicFlames(play, PosX_Start, magicBarY);
-        }
-
         Gfx_SetupDL_39Overlay(play->state.gfxCtx);
 
         gDPSetPrimColor(OVERLAY_DISP++, 0, 0, sMagicBorder.r, sMagicBorder.g, sMagicBorder.b, interfaceCtx->magicAlpha);
@@ -3780,42 +3606,6 @@ void Interface_DrawMagicBar(PlayState* play) {
             gSPWideTextureRectangle(OVERLAY_DISP++, rMagicFillX << 2, (magicBarY + 3) << 2,
                                     (rMagicFillX + gSaveContext.magic) << 2, (magicBarY + 10) << 2, G_TX_RENDERTILE, 0,
                                     0, 1 << 10, 1 << 10);
-        }
-
-        // SoH: Invasion mode, Ganondorf's Resolve: a white meter like his magic meter, just under it
-        if (GdfInvasion_ShowResolveMeter()) {
-            s16 resolveY = magicBarY + 14;
-            // Half as long while the Links are young
-            s16 resolveLen = (s16)(GdfInvasion_ResolveMeterLength() * gSaveContext.magicCapacity);
-            s16 resolveFill = (s16)(GdfInvasion_ResolveFraction() * gSaveContext.magicCapacity);
-
-            gDPPipeSync(OVERLAY_DISP++);
-            Gfx_SetupDL_39Overlay(play->state.gfxCtx);
-            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, sMagicBorder.r, sMagicBorder.g, sMagicBorder.b,
-                            interfaceCtx->magicAlpha);
-            gDPSetEnvColor(OVERLAY_DISP++, 100, 50, 50, 255);
-            OVERLAY_DISP =
-                Gfx_TextureIA8(OVERLAY_DISP, gMagicMeterEndTex, 8, 16, PosX_Start, resolveY, 8, 16, 1 << 10, 1 << 10);
-            OVERLAY_DISP = Gfx_TextureIA8(OVERLAY_DISP, gMagicMeterMidTex, 24, 16, PosX_MidEnd, resolveY,
-                                          resolveLen, 16, 1 << 10, 1 << 10);
-            gDPLoadTextureBlock(OVERLAY_DISP++, gMagicMeterEndTex, G_IM_FMT_IA, G_IM_SIZ_8b, 8, 16, 0,
-                                G_TX_MIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, 3, G_TX_NOMASK, G_TX_NOLOD,
-                                G_TX_NOLOD);
-            gSPWideTextureRectangle(OVERLAY_DISP++, ((rMagicBarX + resolveLen) + 8) << 2,
-                                    resolveY << 2, ((rMagicBarX + resolveLen) + 16) << 2,
-                                    (resolveY + 16) << 2, G_TX_RENDERTILE, 256, 0, 1 << 10, 1 << 10);
-
-            gDPPipeSync(OVERLAY_DISP++);
-            gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, 0, 0, 0, PRIMITIVE,
-                              PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, 0, 0, 0, PRIMITIVE);
-            gDPSetEnvColor(OVERLAY_DISP++, 0, 0, 0, 255);
-            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 245, 245, 245, interfaceCtx->magicAlpha);
-            gDPLoadMultiBlock_4b(OVERLAY_DISP++, gMagicMeterFillTex, 0, G_TX_RENDERTILE, G_IM_FMT_I, 16, 16, 0,
-                                 G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK,
-                                 G_TX_NOLOD, G_TX_NOLOD);
-            gSPWideTextureRectangle(OVERLAY_DISP++, rMagicFillX << 2, (resolveY + 3) << 2,
-                                    (rMagicFillX + resolveFill) << 2, (resolveY + 10) << 2, G_TX_RENDERTILE, 0, 0,
-                                    1 << 10, 1 << 10);
         }
     }
 
@@ -4018,19 +3808,6 @@ void Interface_DrawActionLabel(GraphicsContext* gfxCtx, void* texture) {
 
     CLOSE_DISPS(gfxCtx);
 }
-
-// SoH: "Play as Ganondorf", the C-Up label reads "Poe" while his Poe minion stands in for Navi (IA4, 32x8, drawn in
-// the style of the "Navi" label: white letters on a black outline)
-static u8 sGdfPoeCUpTex[] ALIGNED8 = {
-    0x00, 0x00, 0x00, 0x00, 0x11, 0x11, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x1F, 0xFF, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x1F, 0x11, 0xF1, 0x11, 0x11, 0x11, 0x11, 0x10, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x1F, 0xFF, 0x11, 0x1F, 0xF1, 0x11, 0xFF, 0x11, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x1F, 0x11, 0x11, 0xF1, 0x1F, 0x1F, 0xFF, 0xF1, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x1F, 0x11, 0x11, 0xF1, 0x1F, 0x1F, 0x11, 0x11, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x1F, 0x11, 0x11, 0x1F, 0xF1, 0x11, 0xFF, 0xF1, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x00, 0x00, 0x00, 0x00,
-};
 
 void Interface_DrawItemButtons(PlayState* play) {
     static void* cUpLabelTextures[] = { gNaviCUpENGTex, gNaviCUpENGTex, gNaviCUpENGTex, gNaviCUpJPTex };
@@ -4463,10 +4240,7 @@ void Interface_DrawItemButtons(PlayState* play) {
             gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
                               PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
 
-            gDPLoadTextureBlock_4b(OVERLAY_DISP++,
-                                   PlayAsGanondorf_UsePoeNavi() ? (void*)sGdfPoeCUpTex
-                                                                : cUpLabelTextures[gSaveContext.language],
-                                   G_IM_FMT_IA, 32, 8, 0,
+            gDPLoadTextureBlock_4b(OVERLAY_DISP++, cUpLabelTextures[gSaveContext.language], G_IM_FMT_IA, 32, 8, 0,
                                    G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK,
                                    G_TX_NOLOD, G_TX_NOLOD);
 
@@ -5127,9 +4901,7 @@ void Interface_DrawAmmoCount(PlayState* play, s16 button, s16 alpha) {
             i = ITEM_BOW;
         }
 
-        if (GameInteractor_Should(VB_OVERRIDE_AMMO_COUNT, true, &i, &ammo)) {
-            ammo = AMMO(i);
-        }
+        ammo = AMMO(i);
 
         gDPPipeSync(OVERLAY_DISP++);
 
@@ -5311,25 +5083,7 @@ const char* digitTextures[] = { gCounterDigit0Tex, gCounterDigit1Tex, gCounterDi
                                 gCounterDigit2Tex, gCounterDigit3Tex, gCounterDigit4Tex, gCounterDigit5Tex,
                                 gCounterDigit6Tex, gCounterDigit7Tex, gCounterDigit8Tex };
 
-// SoH: "Play as Ganondorf", single player: his B button stays solid with nothing on it (it holds his spells and fists,
-// not a sword), instead of dimmed as Link's is without a sword. Only the drawing: its fades and states are left as
-// they are, its brightness following the A button's while it's dimmed.
-s32 BossGanon_Player_IsSoloGanondorf(void);
-static void Interface_DrawImpl(PlayState* play);
-
 void Interface_Draw(PlayState* play) {
-    InterfaceContext* interfaceCtx = &play->interfaceCtx;
-    u16 bAlpha = interfaceCtx->bAlpha;
-
-    if (BossGanon_Player_IsSoloGanondorf() && (gSaveContext.buttonStatus[0] == BTN_DISABLED) &&
-        (interfaceCtx->bAlpha == 70)) {
-        interfaceCtx->bAlpha = interfaceCtx->aAlpha;
-    }
-    Interface_DrawImpl(play);
-    interfaceCtx->bAlpha = bAlpha;
-}
-
-static void Interface_DrawImpl(PlayState* play) {
     static s16 magicArrowEffectsR[] = { 255, 100, 255 };
     static s16 magicArrowEffectsG[] = { 0, 100, 255 };
     static s16 magicArrowEffectsB[] = { 0, 255, 100 };
@@ -5685,22 +5439,7 @@ static void Interface_DrawImpl(PlayState* play) {
         gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->bAlpha);
         gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
 
-        if (!(interfaceCtx->unk_1FA) && PlayAsGanondorf_UseGanondorfHud() &&
-            !(player->stateFlags1 & PLAYER_STATE1_ON_HORSE) && (play->shootingGalleryStatus <= 1)) {
-            // SoH: "Play as Ganondorf", his B button shows what B does in his mode: his ball of thunderous light, the
-            // trident's spearhead, or the dark aura
-            static u8* const sGdfBIcons[] = { gGdfBIconLightTex, gGdfBIconTridentTex, gGdfBIconAuraTex };
-            s32 mode = CLAMP(BossGanon_Player_BMode(), 0, 3);
-            u8* icon = (mode == 3) ? Interface_GdfPunchIcon() : sGdfBIcons[mode];
-
-            // The trident's own, made from the player's model (gdf_bicon_trident.bin), when there is one
-            if ((mode == 1) && (GanondorfTrident_GetBIcon() != NULL)) {
-                icon = GanondorfTrident_GetBIcon();
-            }
-            if (fullUi) {
-                Interface_DrawItemIconTexture(play, icon, 0);
-            }
-        } else if (!(interfaceCtx->unk_1FA)) {
+        if (!(interfaceCtx->unk_1FA)) {
             // B Button Icon & Ammo Count
             if (gSaveContext.equips.buttonItems[0] != ITEM_NONE) {
                 if (fullUi) {
@@ -6574,10 +6313,6 @@ static void Interface_DrawImpl(PlayState* play) {
                 }
                 svar5 = OTRGetRectDimensionFromLeftEdge(gSaveContext.timerX[timerId] + X_Margins_Timer);
                 svar2 = gSaveContext.timerY[timerId];
-                // SoH: Invasion mode, in its corner the timer goes under Ganondorf's Resolve meter, not over it
-                if (GdfInvasion_ShowResolveMeter() && (svar2 <= 54)) {
-                    svar2 += 16;
-                }
                 if (CVarGetInteger(CVAR_COSMETIC("HUD.Timers.PosType"), 0) != ORIGINAL_LOCATION) {
                     svar2 = (CVarGetInteger(CVAR_COSMETIC("HUD.Timers.PosY"), 0));
                     if (CVarGetInteger(CVAR_COSMETIC("HUD.Timers.PosType"), 0) == ANCHOR_LEFT) {

@@ -75,8 +75,7 @@ void BgIceShelter_RandomizerDrawSetup(void* actor) {
     Color_RGBA8 envColor;
 
     const auto redIceIdentity = ObjectExtension::GetInstance().Get<CheckIdentity>(redIceActor);
-    if (redIceIdentity == nullptr ||
-        Rando::Context::GetInstance()->GetItemLocation(redIceIdentity->randomizerCheck)->IsExcluded()) {
+    if (redIceIdentity == nullptr) {
         return;
     }
 

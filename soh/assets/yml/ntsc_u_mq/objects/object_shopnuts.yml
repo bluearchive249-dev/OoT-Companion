@@ -11,25 +11,25 @@
   external_files:
     - ntsc_u_mq/objects/gameplay_keep.yml
 
-gBusinessScrubInitialAnim:
+gBusinessScrubAnim_139C:
   type: OOT:ANIMATION
   offset: 0x139C
-  symbol: gBusinessScrubInitialAnim
+  symbol: gBusinessScrubAnim_139C
 
-gBusinessScrubThrowNutAnim:
+gBusinessScrubAnim_1EC:
   type: OOT:ANIMATION
   offset: 0x1EC
-  symbol: gBusinessScrubThrowNutAnim
+  symbol: gBusinessScrubAnim_1EC
 
-gBusinessScrubPeekBurrowAnim:
+gBusinessScrubAnim_39C:
   type: OOT:ANIMATION
   offset: 0x39C
-  symbol: gBusinessScrubPeekBurrowAnim
+  symbol: gBusinessScrubAnim_39C
 
-gBusinessScrubPeekAnim:
+gBusinessScrubAnim_4574:
   type: OOT:ANIMATION
   offset: 0x4574
-  symbol: gBusinessScrubPeekAnim
+  symbol: gBusinessScrubAnim_4574
 
 gBusinessScrubBodyDL:
   type: GFX

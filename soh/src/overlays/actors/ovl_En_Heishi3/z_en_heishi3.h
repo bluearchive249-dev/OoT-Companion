@@ -26,7 +26,6 @@ typedef struct EnHeishi3 {
     /* 0x0278 */ s16 unk_278;
     /* 0x027A */ char unk_27A[0x2];
     /* 0x027C */ ColliderCylinder collider;
-    /* SoH */ u8 gdfCowed; // too afraid of him to do anything
-} EnHeishi3;
+} EnHeishi3; // size = 0x02C8
 
 #endif

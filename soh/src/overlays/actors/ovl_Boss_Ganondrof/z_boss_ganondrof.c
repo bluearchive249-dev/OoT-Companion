@@ -5,7 +5,6 @@
  */
 
 #include "z_boss_ganondrof.h"
-#include "overlays/actors/ovl_Boss_Ganon/z_boss_ganon.h"
 #include "objects/object_gnd/object_gnd.h"
 #include "overlays/actors/ovl_En_fHG/z_en_fhg.h"
 #include "overlays/actors/ovl_En_Fhg_Fire/z_en_fhg_fire.h"
@@ -277,26 +276,6 @@ void BossGanondrof_Destroy(Actor* thisx, PlayState* play) {
 
     osSyncPrintf("DT1\n");
     SkelAnime_Free(&this->skelAnime, play);
-
-    // SoH: his decay mask, laid over his textures, taken off them again once the real one is gone, so his fully faded
-    // look doesn't stay on them ("Play as Ganondorf": the knight's helmet is cut from his head, with his textures)
-    if (this->actor.params == GND_REAL_BOSS) {
-        for (int i = 0; i < 5; i++) {
-            Gfx_UnregisterBlendedTexture(sLimbTex_rgba16_8x8[i]);
-            Gfx_UnregisterBlendedTexture(sLimbTex_rgba16_16x8[i]);
-        }
-        for (int i = 0; i < ARRAY_COUNT(sLimbTex_rgba16_16x16); i++) {
-            Gfx_UnregisterBlendedTexture(sLimbTex_rgba16_16x16[i]);
-        }
-        for (int i = 0; i < ARRAY_COUNT(sLimbTex_rgba16_16x32); i++) {
-            Gfx_UnregisterBlendedTexture(sLimbTex_rgba16_16x32[i]);
-        }
-        Gfx_UnregisterBlendedTexture(gPhantomGanonLimbTex_00B380);
-        Gfx_UnregisterBlendedTexture(gPhantomGanonEyeTex);
-        for (int i = 0; i < ARRAY_COUNT(sMouthTex_ci8_16x16); i++) {
-            Gfx_UnregisterBlendedTexture(sMouthTex_ci8_16x16[i]);
-        }
-    }
     Collider_DestroyCylinder(play, &this->colliderBody);
     Collider_DestroyCylinder(play, &this->colliderSpear);
     if (this->actor.params == GND_REAL_BOSS) {
@@ -1219,20 +1198,6 @@ void BossGanondrof_CollisionCheck(BossGanondrof* this, PlayState* play) {
         this->returnCount = 0;
         this->colliderBody.base.acFlags &= ~AC_HIT;
     } else {
-        // Play as Ganondorf: his dark aura stands in for the arrow that knocks him out of the painting ride, and
-        // hurts him in the air whether or not he's been stunned with his own ball
-        if (((s8)this->actor.colChkInfo.health > 0) && ((play->gameplayFrames % 10) == 0) && (horse != NULL) &&
-            BossGanon_Player_AuraReaches(play, &this->actor, &this->targetPos)) {
-            if (this->flyMode == GND_FLY_PAINTING) {
-                if ((this->actionFunc == BossGanondrof_Paintings) && !horse->bossGndInPainting &&
-                    (horse->hitTimer == 0)) {
-                    BossGanon_Player_AuraFakeHit(&this->colliderBody.base, &this->colliderBody.info, DMG_ARROW_NORMAL);
-                }
-            } else if ((this->actionFunc != BossGanondrof_Charge) && (this->actionFunc != BossGanondrof_Death)) {
-                BossGanon_Player_AuraFakeHit(&this->colliderBody.base, &this->colliderBody.info, DMG_SLASH_MASTER);
-            }
-        }
-
         acHit = this->colliderBody.base.acFlags & AC_HIT;
         if ((acHit && ((s8)this->actor.colChkInfo.health > 0)) || (this->returnCount != 0)) {
             if (acHit) {

@@ -18,14 +18,6 @@ extern "C" {
 extern PlayState* gPlayState;
 }
 
-void GameInteractor::RemoveAllQueuedHooks() {
-#define DEFINE_HOOK(name, _) ProcessUnregisteredHooks<name>();
-
-#include "GameInteractor_HookTable.h"
-
-#undef DEFINE_HOOK
-}
-
 // MARK: - Effects
 
 GameInteractionEffectQueryResult GameInteractor::CanApplyEffect(GameInteractionEffectBase& effect) {

@@ -457,11 +457,6 @@ void Play_Init(GameState* thisx) {
         gSaveContext.sceneLayer = SCENE_LAYER_ADULT_NIGHT;
     }
 
-    // SoH: "Play as Ganondorf" title screen. The boss room has no cutscene layers, so use its only one.
-    if ((gSaveContext.gameMode == GAMEMODE_TITLE_SCREEN) && (gSaveContext.entranceIndex == ENTR_GANONDORF_BOSS_0)) {
-        gSaveContext.sceneLayer = 0;
-    }
-
     // save the base scene layer (before accounting for the special cases below) to use later for the transition type
     baseSceneLayer = gSaveContext.sceneLayer;
 

@@ -9,30 +9,6 @@ struct EnGanonMant;
 #define GANON_MANT_NUM_JOINTS 12
 #define GANON_MANT_NUM_STRANDS 12
 
-// SoH: params value used for the cape worn by Link
-#define LINK_GANON_CAPE_PARAMS 0x4C4B
-// SoH: Link's cape vertices are stored at this many units per world unit for extra precision
-#define LINK_GANON_CAPE_VTX_SCALE 16.0f
-// SoH: params value used for the cape of the player-controlled Ganondorf ("Play as Ganondorf"). It has its own
-// vertex buffers, so it can be on screen together with the real Ganondorf's cape.
-#define PLAYER_GANONDORF_CAPE_PARAMS 0x4744
-// SoH: the player-controlled Ganondorf's cloak: a second cloth that falls over his left shoulder and down his front
-// (z_boss_ganon.c sets its roots, its push and the shapes of his body it drapes over every frame)
-#define PLAYER_GANONDORF_CLOAK_PARAMS 0x4746
-#define PLAYER_GANONDORF_CLOAK2_PARAMS 0x4747
-// SoH: the cloak's capelet over his shoulders: three more pieces, the first drawing the other two
-#define PLAYER_GANONDORF_CAPELET_PARAMS 0x4748
-#define PLAYER_GANONDORF_CAPELET2_PARAMS 0x4749
-#define PLAYER_GANONDORF_CAPELET3_PARAMS 0x474A
-#define GANON_MANT_MAX_LINKED 2
-
-// SoH: a part of his body the cloth can't pass through: a capsule from a to b, of radius r (world units)
-typedef struct {
-    Vec3f a;
-    Vec3f b;
-    f32 r;
-} GanonMantCapsule;
-
 typedef struct {
     /* 0x000 */ Vec3f root;                              // root position along the collar
     /* 0x00C */ Vec3f joints[GANON_MANT_NUM_JOINTS];     // "joints" for deforming the cloak, stemming from root and propagating down the cloak
@@ -61,44 +37,6 @@ typedef struct EnGanonMant {
     /* 0x1704 */ u8 tearTimer; // tear the cloak for x many frames
     /* 0x1705 */ u8 updateHasRun;
     /* 0x1706 */ u8 frameTimer;
-    // SoH: fields used when the cape is worn by Link (see soh/Enhancements/Graphics/LinkGanonCape.cpp)
-    u8 isLinkCape;     // true when spawned with LINK_GANON_CAPE_PARAMS
-    u8 needsReset;     // snap all joints to hang straight down on the next physics step
-    f32 jointLength;   // strand segment length override, 0 = vanilla
-    f32 velocityClamp; // per-axis velocity clamp override, 0 = vanilla (5.0)
-    Vec3f anchor;      // origin the vertex buffer is stored relative to (Link mode only)
-    u8 ownVertices;    // SoH: uses its own vertex buffers instead of the shared gMant1Vtx/gMant2Vtx
-    // SoH: the player-controlled Ganondorf's cloak (both cloths): roots and push direction set from outside, and his
-    // body as capsules the cloth is kept out of
-    u8 rootOverride;
-    Vec3f overrideRoots[GANON_MANT_NUM_STRANDS];
-    f32 overrideBaseYaw;
-    const GanonMantCapsule* capsules;
-    s16 capsuleCount;
-    // SoH: cloths sewn on along this one's last strand, one after another (each one's first strand is the one before's
-    // last), simulated and drawn by this one, so they're one piece of fabric
-    struct EnGanonMant* linked[GANON_MANT_MAX_LINKED];
-    s16 linkedCount;
-    u8 isLinked; // sewn onto another (drawn by it)
-    // SoH: the player-controlled Ganondorf's cape: its hem flared out wider than its top (outward push growing down the
-    // cape), and a billow: a ripple travelling down it and out behind him, at billowPhase (radians, advanced from
-    // outside), as he walks and runs. Both 0 on every other cape.
-    f32 hemFlare;
-    f32 billow;
-    f32 billowPhase;
-    // SoH: how much wider than his shoulders the cape spreads at its top (0 = vanilla, as wide as them)
-    f32 widthScale;
-} EnGanonMant;
-
-// SoH: the player-controlled Ganondorf's hood, drawn with his cape (z_boss_ganon.c / GanondorfHood.cpp); null if off
-void* GanondorfHood_Build(EnGanonMant* cape, PlayState* play);
-// SoH: the mage robe's cloth (the cape's, dark blue): 32x64 RGBA16, or null
-u8* EnGanonMant_GetRobeTex(void);
-
-void EnGanonMant_CapeIcons(s32 on); // SoH: "Play as Ganondorf", the tunics' icons as his capes
-// SoH: "Play as Ganondorf", the Goron (flame) and Zora (ice) Tunics' item models as his mantles
-void EnGanonMant_DrawItemMantle(PlayState* play, s32 ice);
-// SoH: the same still cape: kind 0 his red cloth, 1 flame, 2 ice (the equipment screen draws it behind him)
-void EnGanonMant_DrawHangingCape(PlayState* play, s32 kind);
+} EnGanonMant; // size = 0x1708
 
 #endif

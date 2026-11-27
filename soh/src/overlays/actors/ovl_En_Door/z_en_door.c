@@ -5,9 +5,6 @@
  */
 
 #include "z_en_door.h"
-#include <string.h>
-#include "soh/Enhancements/ExtraModes/PlayAsGanondorf.h" // SoH: door kicks
-#include "soh/Enhancements/ExtraModes/GanondorfInvasion.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "objects/gameplay_field_keep/gameplay_field_keep.h"
 #include "objects/object_hidan_objects/object_hidan_objects.h"
@@ -277,97 +274,14 @@ void EnDoor_AjarClose(EnDoor* this, PlayState* play) {
     }
 }
 
-// ------------------------------------------------------------------------------------------------
-// SoH: "Play as Ganondorf". He doesn't open doors, he kicks them: on the frame the door would swing open it flies off
-// its hinges away from him, tumbles, and slams flat onto the floor with a crash and a cloud of dust. It lies there
-// until he's gone, then it's quietly back in its frame.
-// ------------------------------------------------------------------------------------------------
-#define GDF_DOOR_GRAVITY -1.4f
-
-static void EnDoor_GanondorfKick(EnDoor* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
-    s16 toDoor = Math_Vec3f_Yaw(&player->actor.world.pos, &this->actor.world.pos);
-    s16 facing = this->actor.shape.rot.y;
-    s16 diff = toDoor - facing;
-
-    this->gdfKickState = 1;
-    this->gdfFlyPos = this->actor.world.pos;
-    this->gdfFlyVel.x = Math_SinS(toDoor) * 13.0f;
-    this->gdfFlyVel.y = 7.0f;
-    this->gdfFlyVel.z = Math_CosS(toDoor) * 13.0f;
-    this->gdfFlyYaw = facing;
-    this->gdfFlyPitch = 0;
-    // The panel falls the way he kicked it: forward along the door's facing if he kicked from behind it
-    this->gdfFlyDir = (ABS(diff) < 0x4000) ? 1 : -1;
-    Audio_PlayActorSound2(&this->actor, NA_SE_IT_HAMMER_HIT);
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_WOODBOX_BREAK);
-    Actor_RequestQuakeAndRumble(&this->actor, play, 3, 6);
-    // Invasion mode: the Links see this door kicked in too
-    GdfInvasion_NoteDoorKick(&this->actor.world.pos, &player->actor.world.pos);
-}
-
-// Invasion mode: Ganondorf kicked this door in his game (from `from`): here it flies off its hinges the same way
-void EnDoor_RemoteKick(Actor* thisx, Vec3f* from) {
-    EnDoor* this = (EnDoor*)thisx;
-    s16 toDoor = Math_Vec3f_Yaw(from, &this->actor.world.pos);
-    s16 diff = toDoor - this->actor.shape.rot.y;
-
-    if (this->gdfKickState != 0) {
-        return;
-    }
-    memcpy(this->gdfClosedJoints, this->skelAnime.jointTable, sizeof(this->gdfClosedJoints));
-    this->gdfKickState = 1;
-    this->gdfFlyPos = this->actor.world.pos;
-    this->gdfFlyVel.x = Math_SinS(toDoor) * 13.0f;
-    this->gdfFlyVel.y = 7.0f;
-    this->gdfFlyVel.z = Math_CosS(toDoor) * 13.0f;
-    this->gdfFlyYaw = this->actor.shape.rot.y;
-    this->gdfFlyPitch = 0;
-    this->gdfFlyDir = (ABS(diff) < 0x4000) ? 1 : -1;
-    Audio_PlayActorSound2(&this->actor, NA_SE_IT_HAMMER_HIT);
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_WOODBOX_BREAK);
-}
-
-static void EnDoor_GanondorfFly(EnDoor* this, PlayState* play) {
-    if (this->gdfKickState != 1) {
-        return;
-    }
-    this->gdfFlyPos.x += this->gdfFlyVel.x;
-    this->gdfFlyPos.y += this->gdfFlyVel.y;
-    this->gdfFlyPos.z += this->gdfFlyVel.z;
-    this->gdfFlyVel.y += GDF_DOOR_GRAVITY;
-    Math_StepToS(&this->gdfFlyPitch, 0x4000, 0x0A00);
-
-    if ((this->gdfFlyVel.y < 0.0f) && (this->gdfFlyPos.y <= this->actor.world.pos.y)) {
-        // Slam: flat on the floor, with dust and a crash
-        this->gdfFlyPos.y = this->actor.world.pos.y;
-        this->gdfFlyPitch = 0x4000;
-        this->gdfKickState = 2;
-        Audio_PlayActorSound2(&this->actor, NA_SE_EV_STONE_BOUND);
-        Audio_PlayActorSound2(&this->actor, NA_SE_EV_WOODPLATE_BOUND);
-        Actor_RequestQuakeAndRumble(&this->actor, play, 4, 10);
-        Actor_SpawnFloorDustRing(play, &this->actor, &this->gdfFlyPos, 55.0f, 20, 8.0f, 700, 40, true);
-        Actor_SpawnFloorDustRing(play, &this->actor, &this->gdfFlyPos, 30.0f, 12, 5.0f, 500, 30, true);
-    }
-}
-
 void EnDoor_Open(EnDoor* this, PlayState* play) {
     s32 i;
     s32 numEffects;
-
-    // SoH: "Play as Ganondorf", keep the closed pose to draw the flying panel with
-    if ((this->gdfKickState == 0) && (this->skelAnime.curFrame < 1.0f)) {
-        memcpy(this->gdfClosedJoints, this->skelAnime.jointTable, sizeof(this->gdfClosedJoints));
-    }
-    EnDoor_GanondorfFly(this, play);
 
     if (DECR(this->lockTimer) == 0) {
         if (SkelAnime_Update(&this->skelAnime)) {
             this->actionFunc = EnDoor_Idle;
             this->playerIsOpening = 0;
-        } else if (Animation_OnFrame(&this->skelAnime, sDoorAnimOpenFrames[this->animStyle]) &&
-                   PlayAsGanondorf_ShouldKickDoors()) {
-            EnDoor_GanondorfKick(this, play);
         } else if (Animation_OnFrame(&this->skelAnime, sDoorAnimOpenFrames[this->animStyle])) {
             Audio_PlayActorSound2(&this->actor,
                                   (play->sceneNum == SCENE_SHADOW_TEMPLE ||
@@ -380,8 +294,7 @@ void EnDoor_Open(EnDoor* this, PlayState* play) {
                     EffectSsBubble_Spawn(play, &this->actor.world.pos, 60.0f, 100.0f, 50.0f, 0.15f);
                 }
             }
-        } else if (Animation_OnFrame(&this->skelAnime, sDoorAnimCloseFrames[this->animStyle]) &&
-                   (this->gdfKickState == 0)) {
+        } else if (Animation_OnFrame(&this->skelAnime, sDoorAnimCloseFrames[this->animStyle])) {
             Audio_PlayActorSound2(&this->actor,
                                   (play->sceneNum == SCENE_SHADOW_TEMPLE ||
                                    play->sceneNum == SCENE_BOTTOM_OF_THE_WELL || play->sceneNum == SCENE_FIRE_TEMPLE)
@@ -394,28 +307,7 @@ void EnDoor_Open(EnDoor* this, PlayState* play) {
 void EnDoor_Update(Actor* thisx, PlayState* play) {
     EnDoor* this = (EnDoor*)thisx;
 
-    // (a door kicked in another player's game flies here without opening)
-    if ((this->gdfKickState == 1) && (this->actionFunc != EnDoor_Open)) {
-        EnDoor_GanondorfFly(this, play);
-    }
-
     this->actionFunc(this, play);
-
-    // SoH: "Play as Ganondorf", the kicked door lies on the floor until he's gone, then it's back in its frame. It's
-    // also back as soon as the room on either side is unloaded (once he's through and the game drops the room he
-    // left): the empty doorway would show the void where that room was.
-    if ((this->gdfKickState != 0) && (this->actionFunc != EnDoor_Open)) {
-        TransitionActorEntry* entry = &play->transiActorCtx.list[(u16)this->actor.params >> 0xA];
-        s8 a = entry->sides[0].room;
-        s8 b = entry->sides[1].room;
-        u8 aLoaded = (a == play->roomCtx.curRoom.num) || (a == play->roomCtx.prevRoom.num);
-        u8 bLoaded = (b == play->roomCtx.curRoom.num) || (b == play->roomCtx.prevRoom.num);
-
-        EnDoor_GanondorfFly(this, play);
-        if (((this->gdfKickState == 2) && (this->actor.xzDistToPlayer > 350.0f)) || !aLoaded || !bLoaded) {
-            this->gdfKickState = 0;
-        }
-    }
 }
 
 s32 EnDoor_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, void* thisx) {
@@ -453,22 +345,8 @@ void EnDoor_Draw(Actor* thisx, PlayState* play) {
         OPEN_DISPS(play->state.gfxCtx);
 
         Gfx_SetupDL_25Opa(play->state.gfxCtx);
-        if (this->gdfKickState != 0) {
-            // SoH: "Play as Ganondorf", the panel in flight or lying on the floor, in its closed pose
-            Vec3s saved[5];
-
-            memcpy(saved, this->skelAnime.jointTable, sizeof(saved));
-            memcpy(this->skelAnime.jointTable, this->gdfClosedJoints, sizeof(saved));
-            Matrix_Translate(this->gdfFlyPos.x, this->gdfFlyPos.y, this->gdfFlyPos.z, MTXMODE_NEW);
-            Matrix_RotateY(BINANG_TO_RAD(this->gdfFlyYaw), MTXMODE_APPLY);
-            Matrix_RotateX(BINANG_TO_RAD(this->gdfFlyPitch * this->gdfFlyDir), MTXMODE_APPLY);
-            Matrix_Scale(this->actor.scale.x, this->actor.scale.y, this->actor.scale.z, MTXMODE_APPLY);
-            SkelAnime_DrawSkeletonOpa(play, &this->skelAnime, EnDoor_OverrideLimbDraw, NULL, &this->actor);
-            memcpy(this->skelAnime.jointTable, saved, sizeof(saved));
-        } else {
-            SkelAnime_DrawSkeletonOpa(play, &this->skelAnime, EnDoor_OverrideLimbDraw, NULL, &this->actor);
-        }
-        if ((this->actor.world.rot.y != 0) && (this->gdfKickState == 0)) {
+        SkelAnime_DrawSkeletonOpa(play, &this->skelAnime, EnDoor_OverrideLimbDraw, NULL, &this->actor);
+        if (this->actor.world.rot.y != 0) {
             if (this->actor.world.rot.y > 0) {
                 gSPDisplayList(POLY_OPA_DISP++, gDoorRightDL);
             } else {

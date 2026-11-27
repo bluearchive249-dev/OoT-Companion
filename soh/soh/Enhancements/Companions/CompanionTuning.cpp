@@ -1,7 +1,7 @@
 // Copyright © 2026 Grimsfrost. All rights reserved.
-// Play as Ganondorf: look tuning from ganondorf_tuning.json (see GanondorfTuning.h)
+// Companions: live tuning from companion_tuning.json (see CompanionTuning.h)
 
-#include "GanondorfTuning.h"
+#include "CompanionTuning.h"
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -32,7 +32,7 @@ void Refresh() {
     sLastCheck = now;
     try {
         std::string found;
-        for (const char* name : { "ganondorf_tuning.json", "mods/ganondorf_tuning.json" }) {
+        for (const char* name : { "companion_tuning.json", "mods/companion_tuning.json" }) {
             std::string p = Ship::Context::GetPathRelativeToAppDirectory(name);
             if (std::filesystem::exists(p)) {
                 found = p;
@@ -67,7 +67,7 @@ void Refresh() {
             for (auto& [k, v] : sUsed) {
                 out[k] = v;
             }
-            std::ofstream o(Ship::Context::GetPathRelativeToAppDirectory("ganondorf_tuning_keys.json"));
+            std::ofstream o(Ship::Context::GetPathRelativeToAppDirectory("companion_tuning_keys.json"));
             o << out.dump(2);
             sUsedDirty = false;
             sLastDump = now;
@@ -87,7 +87,7 @@ void Note(const std::string& key, const nlohmann::json& v) {
 
 } // namespace
 
-extern "C" float GdfTune(const char* key, float def) {
+extern "C" float CompTune(const char* key, float def) {
     Refresh();
     float v = def;
     auto it = sTune.find(key);
@@ -98,11 +98,12 @@ extern "C" float GdfTune(const char* key, float def) {
     return v;
 }
 
-extern "C" float GdfTuneAt(const char* key, int index, float def) {
+extern "C" float CompTuneAt(const char* key, int index, float def) {
     Refresh();
     float v = def;
     auto it = sTune.find(key);
-    if ((it != sTune.end()) && it->is_array() && (index >= 0) && (index < (int)it->size()) && (*it)[index].is_number()) {
+    if ((it != sTune.end()) && it->is_array() && (index >= 0) && (index < (int)it->size()) &&
+        (*it)[index].is_number()) {
         v = (*it)[index].get<float>();
     }
     auto used = sUsed.find(key);

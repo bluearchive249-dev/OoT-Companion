@@ -8,70 +8,6 @@
 #include "objects/object_mag/object_mag.h"
 #include <soh/GameVersions.h>
 #include "soh/ResourceManagerHelpers.h"
-#include "soh/Enhancements/ExtraModes/GanondorfLogo.h"
-#include <string.h>
-#include "z_en_mag_gdf_credit.h"
-#include "z_en_mag_gdf_version.h"
-
-// SoH: "Play as Ganondorf" title: "<version> Release", built once from the version number (z_en_mag_gdf_version.h)
-#define GDF_VER_TEX_W 128
-static u8 sGdfVerTex[GDF_VER_TEX_W * GDF_VER_GLYPH_H];
-static u8 sGdfVerTexBuilt = false;
-
-static void EnMag_BuildVersionTex(void) {
-    const char* v = GDF_MOD_VERSION;
-    s32 x = 0;
-    s32 width;
-    s32 start;
-    s32 r;
-    s32 c;
-    u8 line[GDF_VER_TEX_W * GDF_VER_GLYPH_H];
-
-    if (sGdfVerTexBuilt) {
-        return;
-    }
-    sGdfVerTexBuilt = true;
-    memset(line, 0, sizeof(line));
-    for (; *v != '\0'; v++) {
-        const char* at = strchr(sGdfVerChars, *v);
-        s32 g;
-        s32 w;
-
-        if ((at == NULL) || (*v == '\0')) {
-            continue;
-        }
-        g = at - sGdfVerChars;
-        w = sGdfVerGlyphW[g];
-        if (x + w > GDF_VER_TEX_W) {
-            break;
-        }
-        for (r = 0; r < GDF_VER_GLYPH_H; r++) {
-            for (c = 0; c < w; c++) {
-                u8 px = sGdfVerGlyphs[sGdfVerGlyphOff[g] + r * w + c];
-                u8* dst = &line[r * GDF_VER_TEX_W + x + c];
-
-                // (outlines overlapping by a column: the stronger of the two)
-                if ((px & 0xF) > (*dst & 0xF) || ((px >> 4) > (*dst >> 4))) {
-                    *dst = MAX(px & 0xF0, *dst & 0xF0) | MAX(px & 0x0F, *dst & 0x0F);
-                }
-            }
-        }
-        x += w - 1;
-    }
-    x += 3;
-    for (r = 0; r < GDF_VER_GLYPH_H; r++) {
-        for (c = 0; (c < GDF_VER_RELEASE_W) && (x + c < GDF_VER_TEX_W); c++) {
-            line[r * GDF_VER_TEX_W + x + c] = sGdfVerReleaseWord[r * GDF_VER_RELEASE_W + c];
-        }
-    }
-    width = MIN(x + GDF_VER_RELEASE_W, GDF_VER_TEX_W);
-    // (centred in the texture)
-    start = (GDF_VER_TEX_W - width) / 2;
-    memset(sGdfVerTex, 0, sizeof(sGdfVerTex));
-    for (r = 0; r < GDF_VER_GLYPH_H; r++) {
-        memcpy(&sGdfVerTex[r * GDF_VER_TEX_W + start], &line[r * GDF_VER_TEX_W], width);
-    }
-}
 #include <string.h>
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED)
@@ -458,30 +394,6 @@ void EnMag_DrawImageRGBA32(Gfx** gfxp, s16 centerX, s16 centerY, const char* sou
     *gfxp = gfx;
 }
 
-// SoH: "Play as Ganondorf" title logo, an RGBA32 image drawn scaled into a rectangle (the image can be more detailed
-// than the 320x240 screen; it's sampled down)
-void EnMag_DrawGanondorfLogo(Gfx** gfxp, s16 centerX, s16 centerY, const u8* source, u32 texWidth, u32 texHeight,
-                             u32 rectWidth, u32 rectHeight) {
-    Gfx* gfx = *gfxp;
-    s32 rectLeft = centerX - (s32)(rectWidth / 2);
-    s32 rectTop = centerY - (s32)(rectHeight / 2);
-    u32 dsdx = (texWidth << 10) / rectWidth;
-    u32 dtdy = (texHeight << 10) / rectHeight;
-
-    Gfx_SetupDL_56Ptr(&gfx);
-
-    gDPSetTileCustom(gfx++, G_IM_FMT_RGBA, G_IM_SIZ_32b, texWidth, texHeight, 0, G_TX_NOMIRROR | G_TX_CLAMP,
-                     G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
-    gDPSetTextureImage(gfx++, G_IM_FMT_RGBA, G_IM_SIZ_32b, texWidth, source);
-    gDPLoadSync(gfx++);
-    gDPLoadTile(gfx++, G_TX_LOADTILE, 0, 0, (texWidth - 1) << 2, (texHeight - 1) << 2);
-
-    gSPTextureRectangle(gfx++, rectLeft << 2, rectTop << 2, (rectLeft + (s32)rectWidth) << 2,
-                        (rectTop + (s32)rectHeight) << 2, G_TX_RENDERTILE, 0, 0, dsdx, dtdy);
-
-    *gfxp = gfx;
-}
-
 void EnMag_DrawCharTexture(Gfx** gfxP, u8* texture, s32 rectLeft, s32 rectTop) {
     Gfx* gfx = *gfxP;
 
@@ -617,10 +529,6 @@ void EnMag_DrawInner(Actor* thisx, PlayState* play, Gfx** gfxP) {
     bool isJpnGC_notCE =
         isGC && (ResourceMgr_GetGameVersion(0) == OOT_NTSC_JP_GC || ResourceMgr_GetGameVersion(0) == OOT_NTSC_JP_MQ);
 
-    unsigned int gdfLogoWidth = 0;
-    unsigned int gdfLogoHeight = 0;
-    const u8* gdfLogo = GanondorfLogo_Get(&gdfLogoWidth, &gdfLogoHeight);
-
     gSPSegment(gfx++, 0x06, play->objectCtx.status[this->actor.objBankIndex].segment);
 
     Gfx_SetupDL_39Ptr(&gfx);
@@ -638,31 +546,7 @@ void EnMag_DrawInner(Actor* thisx, PlayState* play, Gfx** gfxP) {
     gDPSetEnvColor(gfx++, (s16)this->effectEnvColor[0], (s16)this->effectEnvColor[1], (s16)this->effectEnvColor[2],
                    255);
 
-    // SoH: "Play as Ganondorf" logo, the same title flames burning around the whole logo, in crimson and gold
-    if (((s16)this->effectPrimLodFrac != 0) && (gdfLogo != NULL)) {
-        s32 maskLeft;
-        s32 maskTop;
-        s32 maskWidth;
-        s32 maskHeight;
-        const u8* mask = GanondorfLogo_GetFlameMask(&maskLeft, &maskTop, &maskWidth, &maskHeight);
-        f32 heat = this->effectPrimLodFrac / 128.0f;
-
-        if (mask != NULL) {
-            gDPSetPrimColor(gfx++, 0, (s16)this->effectPrimLodFrac, 255, (s16)(150 + 70 * heat), (s16)(60 + 90 * heat),
-                            (s16)this->effectAlpha);
-            gDPSetEnvColor(gfx++, (s16)(120 + 80 * heat), 0, (s16)(140 - 60 * heat), 255);
-            gDPLoadMultiTile(gfx++, mask, 0x0000, G_TX_RENDERTILE, G_IM_FMT_I, G_IM_SIZ_8b, maskWidth, maskHeight, 0,
-                             0, maskWidth - 1, maskHeight - 1, 0, G_TX_NOMIRROR | G_TX_CLAMP,
-                             G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
-            gDPLoadMultiBlock(gfx++, gTitleFlameEffectTex, 0x0100, 1, G_IM_FMT_I, G_IM_SIZ_8b, 32, 32, 0,
-                              G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, 5, 5, 1, 1);
-            gDPSetTileSize(gfx++, 1, 0, this->effectScroll & 0x7F, 31 << 2, (31 << 2) + (this->effectScroll & 0x7F));
-            gSPTextureRectangle(gfx++, maskLeft << 2, maskTop << 2, (maskLeft + maskWidth) << 2,
-                                (maskTop + maskHeight) << 2, G_TX_RENDERTILE, 0, 0, 1 << 10, 1 << 10);
-        }
-    }
-
-    if (((s16)this->effectPrimLodFrac != 0) && (gdfLogo == NULL)) {
+    if ((s16)this->effectPrimLodFrac != 0) {
         for (k = 0, i = 0, rectTop = 0; i < 3; i++, rectTop += 64) {
             for (j = 0, rectLeft = 64 + LOGO_X_SHIFT; j < 3; j++, k++, rectLeft += 64) {
                 EnMag_DrawEffectTextures(&gfx, effectMaskTextures[k], gTitleFlameEffectTex, 64, 64, 32, 32, rectLeft,
@@ -674,19 +558,7 @@ void EnMag_DrawInner(Actor* thisx, PlayState* play, Gfx** gfxP) {
     gDPSetPrimColor(gfx++, 0, 0, 255, 255, 255, (s16)this->mainAlpha);
 
     if ((s16)this->mainAlpha != 0) {
-        if (gdfLogo != NULL) {
-            // SoH: "Play as Ganondorf", his own logo in place of the shield logo, its titles and the flames
-            s32 logoLeft;
-            s32 logoTop;
-            s32 logoWidth;
-            s32 logoHeight;
-
-            GanondorfLogo_GetRect(&logoLeft, &logoTop, &logoWidth, &logoHeight);
-            EnMag_DrawGanondorfLogo(&gfx, logoLeft + logoWidth / 2, logoTop + logoHeight / 2, gdfLogo, gdfLogoWidth,
-                                    gdfLogoHeight, logoWidth, logoHeight);
-        } else {
-            EnMag_DrawImageRGBA32(&gfx, 160 + LOGO_X_SHIFT, 100, (u8*)LOGO_TEX, 160, 160);
-        }
+        EnMag_DrawImageRGBA32(&gfx, 160 + LOGO_X_SHIFT, 100, (u8*)LOGO_TEX, 160, 160);
     }
 
     Gfx_SetupDL_39Ptr(&gfx);
@@ -710,7 +582,7 @@ void EnMag_DrawInner(Actor* thisx, PlayState* play, Gfx** gfxP) {
         gDPSetEnvColor(gfx++, 0, 0, 100, 255);
     }
 
-    if (((s16)this->mainAlpha != 0) && (gdfLogo == NULL)) {
+    if ((s16)this->mainAlpha != 0) {
         EnMag_DrawTextureI8(&gfx, gTitleTheLegendOfTextTex, 72, 8, 154 + LOGO_X_SHIFT, 73, 72, 8, 1024, 1024);
         EnMag_DrawTextureI8(&gfx, gTitleOcarinaOfTimeTMTextTex, 96, 8, 152 + LOGO_X_SHIFT, 127, 96, 8, 1024, 1024);
 
@@ -780,42 +652,12 @@ void EnMag_DrawInner(Actor* thisx, PlayState* play, Gfx** gfxP) {
                     (s16)this->copyrightAlpha);
 
     if ((s16)this->copyrightAlpha != 0) {
-        // SoH: "Play as Ganondorf" title, the mod's credit beside the copyright, a wide gap apart, both centred
-        s32 showCredit = CVarGetInteger(CVAR_ENHANCEMENT("PlayAsGanondorf.TitleLogo"), 1);
-        s32 copyrightLeft = COPYRIGHT_TEX_LEFT;
-
-        if (showCredit) {
-            s32 total = COPYRIGHT_TEX_WIDTH + 40 + GDF_CREDIT_WIDTH;
-
-            copyrightLeft = 160 - total / 2;
-        }
-
         gDPLoadTextureBlock(gfx++, COPYRIGHT_TEX, G_IM_FMT_IA, G_IM_SIZ_8b, COPYRIGHT_TEX_WIDTH, 16, 0,
                             G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK,
                             G_TX_NOLOD, G_TX_NOLOD);
 
-        gSPTextureRectangle(gfx++, copyrightLeft << 2, 198 << 2, (copyrightLeft + COPYRIGHT_TEX_WIDTH) << 2,
+        gSPTextureRectangle(gfx++, COPYRIGHT_TEX_LEFT << 2, 198 << 2, (COPYRIGHT_TEX_LEFT + COPYRIGHT_TEX_WIDTH) << 2,
                             (198 + 16) << 2, G_TX_RENDERTILE, 0, 0, 1 << 10, 1 << 10);
-
-        if (showCredit) {
-            s32 creditLeft = copyrightLeft + COPYRIGHT_TEX_WIDTH + 40;
-            s32 preLeft = creditLeft + (GDF_CREDIT_WIDTH - GDF_VER_TEX_W) / 2;
-
-            gDPLoadTextureBlock(gfx++, sGdfCreditTex, G_IM_FMT_IA, G_IM_SIZ_8b, GDF_CREDIT_WIDTH, GDF_CREDIT_HEIGHT, 0,
-                                G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK,
-                                G_TX_NOLOD, G_TX_NOLOD);
-            gSPTextureRectangle(gfx++, creditLeft << 2, 198 << 2, (creditLeft + GDF_CREDIT_WIDTH) << 2,
-                                (198 + GDF_CREDIT_HEIGHT) << 2, G_TX_RENDERTILE, 0, 0, 1 << 10, 1 << 10);
-
-            // "<version> Release" centred under it
-            EnMag_BuildVersionTex();
-            gSPInvalidateTexCache(gfx++, sGdfVerTex);
-            gDPLoadTextureBlock(gfx++, sGdfVerTex, G_IM_FMT_IA, G_IM_SIZ_8b, GDF_VER_TEX_W, GDF_VER_GLYPH_H, 0,
-                                G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMIRROR | G_TX_CLAMP, G_TX_NOMASK, G_TX_NOMASK,
-                                G_TX_NOLOD, G_TX_NOLOD);
-            gSPTextureRectangle(gfx++, preLeft << 2, 212 << 2, (preLeft + GDF_VER_TEX_W) << 2,
-                                (212 + GDF_VER_GLYPH_H) << 2, G_TX_RENDERTILE, 0, 0, 1 << 10, 1 << 10);
-        }
     }
 
     if (gSaveContext.fileNum == 0xFEDC) {

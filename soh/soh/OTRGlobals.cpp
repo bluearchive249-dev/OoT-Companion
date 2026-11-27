@@ -1062,7 +1062,6 @@ uint32_t OTRGlobals::GetInterpolationFPS() {
 extern "C" void OTRMessage_Init();
 extern "C" void AudioMgr_CreateNextAudioBuffer(s16* samples, u32 num_samples);
 extern "C" void AudioPlayer_Play(const uint8_t* buf, uint32_t len);
-#include "soh/Enhancements/ExtraModes/GanondorfDance.h"
 int AudioPlayer_Buffered(void);
 extern "C" int AudioPlayer_GetDesiredBuffered(void);
 std::unordered_map<std::string, ExtensionEntry> ExtensionCache;
@@ -1098,9 +1097,6 @@ void OTRAudio_Thread() {
             AudioMgr_CreateNextAudioBuffer(audio_buffer + i * (num_audio_samples * NUM_AUDIO_CHANNELS),
                                            num_audio_samples);
         }
-
-        // Play as Ganondorf: his dance song mixed in
-        GanondorfDance_Mix(audio_buffer, num_audio_samples * AUDIO_FRAMES_PER_UPDATE);
 
         AudioPlayer_Play((u8*)audio_buffer,
                          num_audio_samples * (sizeof(int16_t) * NUM_AUDIO_CHANNELS * AUDIO_FRAMES_PER_UPDATE));
@@ -1812,14 +1808,9 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIWidgets::ColorValues.at(themeColor));
     for (int i = 0; i < count; i++) {
         time += step;
-        const float interpolationStep = (float)time / denom;
         std::unordered_map<Mtx*, MtxF> mtx_replacements =
-            (time == denom) ? std::unordered_map<Mtx*, MtxF>() : FrameInterpolation_Interpolate(interpolationStep);
-        // Ribbon vertices are shared by every frame of a tick: re-blend them before each run.
-        FrameInterpolation_UpdateRibbonHeads(interpolationStep);
-        // Skinned vertices are shared by every displayed frame, so blend them before each run
-        FrameInterpolation_UpdateSkinnedVertices(interpolationStep);
-        intp->mInterpolationT = interpolationStep;
+            (time == denom) ? std::unordered_map<Mtx*, MtxF>() : FrameInterpolation_Interpolate((float)time / denom);
+        intp->mInterpolationT = (float)time / denom;
         wnd->DrawAndRunGraphicsCommands(Commands, mtx_replacements);
         intp->mInterpolationIndex++;
     }

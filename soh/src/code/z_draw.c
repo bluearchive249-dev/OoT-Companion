@@ -889,18 +889,8 @@ void GetItem_DrawMagicSpell(PlayState* play, s16 drawId) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-s32 BossGanon_Player_IsSoloGanondorf(void);
-void EnGanonMant_DrawItemMantle(PlayState* play, s32 ice);
-
 void GetItem_DrawOpa1023(PlayState* play, s16 drawId) {
     s32 pad;
-
-    // SoH: "Play as Ganondorf", single player: the Goron and Zora Tunics' models as the flame and ice mantles they are
-    // for him, the capes themselves (z_en_ganon_mant.c)
-    if (BossGanon_Player_IsSoloGanondorf() && ((drawId == GID_TUNIC_GORON) || (drawId == GID_TUNIC_ZORA))) {
-        EnGanonMant_DrawItemMantle(play, drawId == GID_TUNIC_ZORA);
-        return;
-    }
 
     OPEN_DISPS(play->state.gfxCtx);
 

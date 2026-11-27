@@ -1,5 +1,4 @@
 #include "z_boss_dodongo.h"
-#include "overlays/actors/ovl_Boss_Ganon/z_boss_ganon.h" // SoH: Play as Ganondorf
 #include "textures/boss_title_cards/object_kingdodongo.h"
 #include "objects/object_kingdodongo/object_kingdodongo.h"
 #include "overlays/actors/ovl_Door_Warp1/z_door_warp1.h"
@@ -312,8 +311,7 @@ s32 BossDodongo_AteExplosive(BossDodongo* this, PlayState* play) {
         currentExplosive = currentExplosive->next;
     }
 
-    // SoH: "Play as Ganondorf" can't throw bombs; his light balls (bombs hidden in the light) work instead
-    return BossGanon_Player_SwallowLightBall(play, &this->mouthPos, 100.0f);
+    return false;
 }
 
 void BossDodongo_Init(Actor* thisx, PlayState* play) {

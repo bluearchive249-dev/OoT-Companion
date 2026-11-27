@@ -59,7 +59,7 @@ typedef enum {
 #define ENHORSE_FLAG_28                    (1 << 28)  /* 0x1000 0000 */
 #define ENHORSE_FLAG_29                    (1 << 29)  /* 0x2000 0000 */
 #define ENHORSE_FLAG_30                    (1 << 30)  /* 0x4000 0000 */
-#define ENHORSE_FLAG_31                    (1u << 31)  /* 0x8000 0000 */
+#define ENHORSE_FLAG_31                    (1 << 31)  /* 0x8000 0000 */
 
 struct EnHorse;
 
@@ -160,16 +160,7 @@ typedef struct EnHorse {
     /* 0x03D8 */ Vec3f frontLeftHoof;
     /* 0x03E4 */ Vec3f backRightHoof;
     /* 0x03F0 */ Vec3f backLeftHoof;
-    // SoH: "Play as Ganondorf", Epona is drawn as his black horse
-    Skin gdfSkin;
-    s8 gdfAnimIdx;
-    u8 gdfSkinReady;
-    u8 gdfSeatValid;
-    Vec3f gdfSeatPos;
-} EnHorse;
-
-// SoH: "Play as Ganondorf", where he sits on his horse (false when Epona isn't drawn as it)
-s32 EnHorse_GetGanondorfSeat(Actor* horse, Vec3f* seat);
+} EnHorse; // size = 0x03FC
 
 #define EN_HORSE_CHECK_1(horseActor) \
     (((horseActor)->stateFlags & ENHORSE_FLAG_6)  \

@@ -1,5 +1,4 @@
 #include "global.h"
-#include "soh/Enhancements/ExtraModes/GanondorfInvasion.h"
 #include "vt.h"
 
 #include "overlays/actors/ovl_Arms_Hook/z_arms_hook.h"
@@ -19,8 +18,6 @@
 #include "soh/ActorDB.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ShipUtils.h"
-#include "overlays/actors/ovl_Boss_Ganon/z_boss_ganon.h"
-#include "soh/Enhancements/ExtraModes/PlayAsGanondorf.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -668,9 +665,9 @@ void Attention_Update(TargetContext* targetCtx, Player* player, Actor* actorArg,
  */
 s32 Flags_GetSwitch(PlayState* play, s32 flag) {
     if (flag < 0x20) {
-        return play->actorCtx.flags.swch & (1u << flag);
+        return play->actorCtx.flags.swch & (1 << flag);
     } else {
-        return play->actorCtx.flags.tempSwch & (1u << (flag - 0x20));
+        return play->actorCtx.flags.tempSwch & (1 << (flag - 0x20));
     }
 }
 
@@ -680,9 +677,9 @@ s32 Flags_GetSwitch(PlayState* play, s32 flag) {
 void Flags_SetSwitch(PlayState* play, s32 flag) {
     u8 previouslyOff = !Flags_GetSwitch(play, flag);
     if (flag < 0x20) {
-        play->actorCtx.flags.swch |= (1u << flag);
+        play->actorCtx.flags.swch |= (1 << flag);
     } else {
-        play->actorCtx.flags.tempSwch |= (1u << (flag - 0x20));
+        play->actorCtx.flags.tempSwch |= (1 << (flag - 0x20));
     }
     if (previouslyOff) {
         LUSLOG_INFO("Switch Flag Set - %#x", flag);
@@ -696,9 +693,9 @@ void Flags_SetSwitch(PlayState* play, s32 flag) {
 void Flags_UnsetSwitch(PlayState* play, s32 flag) {
     u8 previouslyOn = Flags_GetSwitch(play, flag);
     if (flag < 0x20) {
-        play->actorCtx.flags.swch &= ~(1u << flag);
+        play->actorCtx.flags.swch &= ~(1 << flag);
     } else {
-        play->actorCtx.flags.tempSwch &= ~(1u << (flag - 0x20));
+        play->actorCtx.flags.tempSwch &= ~(1 << (flag - 0x20));
     }
     if (previouslyOn) {
         LUSLOG_INFO("Switch Flag Unset - %#x", flag);
@@ -711,9 +708,9 @@ void Flags_UnsetSwitch(PlayState* play, s32 flag) {
  */
 s32 Flags_GetUnknown(PlayState* play, s32 flag) {
     if (flag < 0x20) {
-        return play->actorCtx.flags.unk0 & (1u << flag);
+        return play->actorCtx.flags.unk0 & (1 << flag);
     } else {
-        return play->actorCtx.flags.unk1 & (1u << (flag - 0x20));
+        return play->actorCtx.flags.unk1 & (1 << (flag - 0x20));
     }
 }
 
@@ -722,9 +719,9 @@ s32 Flags_GetUnknown(PlayState* play, s32 flag) {
  */
 void Flags_SetUnknown(PlayState* play, s32 flag) {
     if (flag < 0x20) {
-        play->actorCtx.flags.unk0 |= (1u << flag);
+        play->actorCtx.flags.unk0 |= (1 << flag);
     } else {
-        play->actorCtx.flags.unk1 |= (1u << (flag - 0x20));
+        play->actorCtx.flags.unk1 |= (1 << (flag - 0x20));
     }
 }
 
@@ -733,9 +730,9 @@ void Flags_SetUnknown(PlayState* play, s32 flag) {
  */
 void Flags_UnsetUnknown(PlayState* play, s32 flag) {
     if (flag < 0x20) {
-        play->actorCtx.flags.unk0 &= ~(1u << flag);
+        play->actorCtx.flags.unk0 &= ~(1 << flag);
     } else {
-        play->actorCtx.flags.unk1 &= ~(1u << (flag - 0x20));
+        play->actorCtx.flags.unk1 &= ~(1 << (flag - 0x20));
     }
 }
 
@@ -743,7 +740,7 @@ void Flags_UnsetUnknown(PlayState* play, s32 flag) {
  * Tests if current scene chest flag is set.
  */
 s32 Flags_GetTreasure(PlayState* play, s32 flag) {
-    return play->actorCtx.flags.chest & (1u << flag);
+    return play->actorCtx.flags.chest & (1 << flag);
 }
 
 /**
@@ -751,7 +748,7 @@ s32 Flags_GetTreasure(PlayState* play, s32 flag) {
  */
 void Flags_SetTreasure(PlayState* play, s32 flag) {
     u8 previouslyOff = !Flags_GetTreasure(play, flag);
-    play->actorCtx.flags.chest |= (1u << flag);
+    play->actorCtx.flags.chest |= (1 << flag);
     if (previouslyOff) {
         LUSLOG_INFO("Treasure Flag Set - %#x", flag);
         GameInteractor_ExecuteOnSceneFlagSet(play->sceneNum, FLAG_SCENE_TREASURE, flag);
@@ -762,7 +759,7 @@ void Flags_SetTreasure(PlayState* play, s32 flag) {
  * Tests if current scene clear flag is set.
  */
 s32 Flags_GetClear(PlayState* play, s32 flag) {
-    return play->actorCtx.flags.clear & (1u << flag);
+    return play->actorCtx.flags.clear & (1 << flag);
 }
 
 /**
@@ -770,7 +767,7 @@ s32 Flags_GetClear(PlayState* play, s32 flag) {
  */
 void Flags_SetClear(PlayState* play, s32 flag) {
     u8 previouslyOff = !Flags_GetClear(play, flag);
-    play->actorCtx.flags.clear |= (1u << flag);
+    play->actorCtx.flags.clear |= (1 << flag);
     if (previouslyOff) {
         LUSLOG_INFO("Clear Flag Set - %#x", flag);
         GameInteractor_ExecuteOnSceneFlagSet(play->sceneNum, FLAG_SCENE_CLEAR, flag);
@@ -782,7 +779,7 @@ void Flags_SetClear(PlayState* play, s32 flag) {
  */
 void Flags_UnsetClear(PlayState* play, s32 flag) {
     u8 previouslyOn = Flags_GetClear(play, flag);
-    play->actorCtx.flags.clear &= ~(1u << flag);
+    play->actorCtx.flags.clear &= ~(1 << flag);
     if (previouslyOn) {
         LUSLOG_INFO("Clear Flag Unset - %#x", flag);
         GameInteractor_ExecuteOnSceneFlagUnset(play->sceneNum, FLAG_SCENE_CLEAR, flag);
@@ -793,21 +790,21 @@ void Flags_UnsetClear(PlayState* play, s32 flag) {
  * Tests if current scene temp clear flag is set.
  */
 s32 Flags_GetTempClear(PlayState* play, s32 flag) {
-    return play->actorCtx.flags.tempClear & (1u << flag);
+    return play->actorCtx.flags.tempClear & (1 << flag);
 }
 
 /**
  * Sets current scene temp clear flag.
  */
 void Flags_SetTempClear(PlayState* play, s32 flag) {
-    play->actorCtx.flags.tempClear |= (1u << flag);
+    play->actorCtx.flags.tempClear |= (1 << flag);
 }
 
 /**
  * Unsets current scene temp clear flag.
  */
 void Flags_UnsetTempClear(PlayState* play, s32 flag) {
-    play->actorCtx.flags.tempClear &= ~(1u << flag);
+    play->actorCtx.flags.tempClear &= ~(1 << flag);
 }
 
 /**
@@ -815,9 +812,9 @@ void Flags_UnsetTempClear(PlayState* play, s32 flag) {
  */
 s32 Flags_GetCollectible(PlayState* play, s32 flag) {
     if (flag < 0x20) {
-        return play->actorCtx.flags.collect & (1u << flag);
+        return play->actorCtx.flags.collect & (1 << flag);
     } else {
-        return play->actorCtx.flags.tempCollect & (1u << (flag - 0x20));
+        return play->actorCtx.flags.tempCollect & (1 << (flag - 0x20));
     }
 }
 
@@ -828,9 +825,9 @@ void Flags_SetCollectible(PlayState* play, s32 flag) {
     u8 previouslyOff = !Flags_GetCollectible(play, flag);
     if (flag != 0) {
         if (flag < 0x20) {
-            play->actorCtx.flags.collect |= (1u << flag);
+            play->actorCtx.flags.collect |= (1 << flag);
         } else {
-            play->actorCtx.flags.tempCollect |= (1u << (flag - 0x20));
+            play->actorCtx.flags.tempCollect |= (1 << (flag - 0x20));
         }
     }
     if (previouslyOff) {
@@ -1262,9 +1259,7 @@ void Actor_Init(Actor* actor, PlayState* play) {
         Actor_SetObjectDependency(play, actor);
 
         if (GameInteractor_ShouldActorInit(actor)) {
-            gGdfInitActor = actor; // (world sync: which actor a skeleton belongs to)
             actor->init(actor, play);
-            gGdfInitActor = NULL;
             actor->init = NULL;
 
             GameInteractor_ExecuteOnActorInit(actor);
@@ -1276,7 +1271,6 @@ void Actor_Init(Actor* actor, PlayState* play) {
 }
 
 void Actor_Destroy(Actor* actor, PlayState* play) {
-    GdfInvasion_ForgetActor(actor);
     if (actor->destroy != NULL) {
         if (GameInteractor_ShouldActorDestroy(actor)) {
             actor->destroy(actor, play);
@@ -2251,14 +2245,6 @@ void Actor_SetPlayerKnockbackSmallNoDamage(PlayState* play, Actor* actor, f32 ar
 }
 
 void Player_PlaySfx(Actor* actor, u16 sfxId) {
-    // SoH: "Play as Ganondorf", Link's voice clips become Ganondorf's
-    if ((actor->id == ACTOR_PLAYER) && (sfxId >= NA_SE_VO_LI_SWORD_N) && (sfxId <= NA_SE_VO_LI_ELECTRIC_SHOCK_LV_KID)) {
-        sfxId = PlayAsGanondorf_GetVoiceSfx((Player*)actor, sfxId);
-        if (sfxId == PLAY_AS_GANONDORF_MUTE) {
-            return;
-        }
-    }
-
     if (actor->id != ACTOR_PLAYER || sfxId < NA_SE_VO_LI_SWORD_N || sfxId > NA_SE_VO_LI_ELECTRIC_SHOCK_LV_KID) {
         Audio_PlaySfxGeneral(sfxId, &actor->projectedPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                              &gSfxDefaultReverb);
@@ -2657,9 +2643,7 @@ void Actor_UpdateAll(PlayState* play, ActorContext* actorCtx) {
                     Actor_SetObjectDependency(play, actor);
 
                     if (GameInteractor_ShouldActorInit(actor)) {
-                        gGdfInitActor = actor;
                         actor->init(actor, play);
-                        gGdfInitActor = NULL;
                         actor->init = NULL;
 
                         GameInteractor_ExecuteOnActorInit(actor);
@@ -2674,10 +2658,7 @@ void Actor_UpdateAll(PlayState* play, ActorContext* actorCtx) {
                 actor = actor->next;
             } else if ((unkFlag && !(actor->flags & unkFlag)) ||
                        (!unkFlag && unkCondition && (sp74 != actor) && (actor != player->naviActor) &&
-                        (actor != player->heldActor) && (&player->actor != actor->parent) &&
-                        // SoH: "Play as Ganondorf", he (and his cape) keeps moving while the world holds still,
-                        // as Link does
-                        !PlayAsGanondorf_IgnoresFreeze(actor))) {
+                        (actor != player->heldActor) && (&player->actor != actor->parent))) {
                 CollisionCheck_ResetDamage(&actor->colChkInfo);
                 actor = actor->next;
             } else if (actor->update == NULL) {
@@ -2713,42 +2694,7 @@ void Actor_UpdateAll(PlayState* play, ActorContext* actorCtx) {
                         actor->colorFilterTimer--;
                     }
                     if (GameInteractor_ShouldActorUpdate(actor)) {
-                        // Invasion mode: the monsters and bosses in Ganondorf's game don't go after him (the Links
-                        // are his enemies): to them he's far out of reach while they think (his own targeting
-                        // still sees them where they are)
-                        u8 ignoreHim = GdfInvasion_ShieldedFromWorld() && ((i == ACTORCAT_ENEMY) || (i == ACTORCAT_BOSS)) &&
-                                       (actor->id != ACTOR_BOSS_GANON) && (actor->id != ACTOR_BOSS_GANON2);
-                        f32 xzDist = actor->xzDistToPlayer;
-                        f32 yDist = actor->yDistToPlayer;
-                        f32 distSq = actor->xyzDistToPlayerSq;
-
-                        Vec3f himPos = player->actor.world.pos;
-                        Vec3f himFocus = player->actor.focus.pos;
-
-                        if (ignoreHim) {
-                            // (and to those that look straight at where he is, he's far below the world)
-                            player->actor.world.pos.y -= 30000.0f;
-                            player->actor.focus.pos.y -= 30000.0f;
-                            actor->xzDistToPlayer = 30000.0f;
-                            actor->yDistToPlayer = 30000.0f;
-                            actor->xyzDistToPlayerSq = SQ(30000.0f) * 2.0f;
-                        }
                         actor->update(actor, play);
-                        if (ignoreHim) {
-                            player->actor.world.pos = himPos;
-                            player->actor.focus.pos = himFocus;
-                        }
-                        // World sync: a boss here follows the host Link's boss
-                        if ((i == ACTORCAT_BOSS) && (actor->update != NULL)) {
-                            GdfInvasion_AfterBossUpdate(actor);
-                        } else if ((i == ACTORCAT_BG) && (actor->update != NULL)) {
-                            GdfInvasion_AfterBgUpdate(actor); // blocks, platforms, elevators
-                        }
-                        if (ignoreHim && (actor->update != NULL)) {
-                            actor->xzDistToPlayer = xzDist;
-                            actor->yDistToPlayer = yDist;
-                            actor->xyzDistToPlayerSq = distSq;
-                        }
                         GameInteractor_ExecuteOnActorUpdate(actor);
                     }
                     func_8003F8EC(play, &play->colCtx.dyna, actor);
@@ -3467,7 +3413,6 @@ Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 pos
     gSegments[6] = temp;
 
     GameInteractor_ExecuteOnActorSpawn(actor);
-    FrameInterpolation_DontInterpolateChild(actor);
 
     return actor;
 }
@@ -3918,22 +3863,6 @@ Actor* Actor_GetCollidedExplosive(PlayState* play, Collider* collider) {
     if ((collider->acFlags & AC_HIT) && (collider->ac->category == ACTORCAT_EXPLOSIVE)) {
         collider->acFlags &= ~AC_HIT;
         return collider->ac;
-    }
-
-    // SoH: "Play as Ganondorf". His attacks count as explosions for things that only react to bombs (Beamos,
-    // Bubbles, some walls, ...). Callers may read the explosive's position or overwrite its params (Dodongo's
-    // Cavern stairs), so hand them a stand-in instead of Ganondorf's own actor.
-    if ((collider->acFlags & AC_HIT) && BossGanon_IsPlayerAttack(collider->ac)) {
-        static Actor sGanondorfExplosion;
-
-        memset(&sGanondorfExplosion, 0, sizeof(sGanondorfExplosion));
-        sGanondorfExplosion.id = ACTOR_EN_BOM;
-        sGanondorfExplosion.category = ACTORCAT_EXPLOSIVE;
-        sGanondorfExplosion.params = 1; // BOMB_EXPLOSION
-        sGanondorfExplosion.world = collider->ac->world;
-        sGanondorfExplosion.home = collider->ac->world;
-        collider->acFlags &= ~AC_HIT;
-        return &sGanondorfExplosion;
     }
 
     return NULL;
@@ -4464,18 +4393,6 @@ void Npc_TrackPointWithLimits(Actor* actor, NpcInteractInfo* interactInfo, s16 m
     offsetActorPos.x = actor->world.pos.x;
     offsetActorPos.y = actor->world.pos.y + interactInfo->yOffset;
     offsetActorPos.z = actor->world.pos.z;
-
-    // SoH: "Play as Ganondorf", an NPC tracking the player (its point is on Link) looks up at Ganondorf's head
-    if (gPlayState != NULL) {
-        Player* trackedPlayer = GET_PLAYER(gPlayState);
-        Vec3f head;
-
-        if ((trackedPlayer != NULL) &&
-            (Math_Vec3f_DistXZ(&interactInfo->trackPos, &trackedPlayer->actor.world.pos) < 10.0f) &&
-            PlayAsGanondorf_GetLookAtPos(trackedPlayer, &head)) {
-            interactInfo->trackPos.y = head.y;
-        }
-    }
 
     pitchTowardsTarget = Math_Vec3f_Pitch(&offsetActorPos, &interactInfo->trackPos);
     yawTowardsTarget = Math_Vec3f_Yaw(&offsetActorPos, &interactInfo->trackPos);
@@ -6533,7 +6450,6 @@ s32 Actor_TrackPlayerSetFocusHeight(PlayState* play, Actor* actor, Vec3s* arg2, 
         sp2C = play->view.eye;
     } else {
         sp2C = player->actor.focus.pos;
-        PlayAsGanondorf_GetLookAtPos(player, &sp2C); // SoH: they look at Ganondorf's head
     }
 
     Actor_TrackPoint(actor, &sp2C, arg2, arg3);
@@ -6565,7 +6481,6 @@ s32 Actor_TrackPlayer(PlayState* play, Actor* actor, Vec3s* arg2, Vec3s* arg3, V
         sp24 = play->view.eye;
     } else {
         sp24 = player->actor.focus.pos;
-        PlayAsGanondorf_GetLookAtPos(player, &sp24); // SoH: they look at Ganondorf's head
     }
 
     Actor_TrackPoint(actor, &sp24, arg2, arg3);

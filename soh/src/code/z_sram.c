@@ -1,5 +1,4 @@
 #include "global.h"
-#include "soh/Enhancements/ExtraModes/GanondorfStart.h"
 #include "soh/Enhancements/game-interactor/vanilla-behavior/GIVanillaBehavior.h"
 #include "vt.h"
 
@@ -133,7 +132,7 @@ void Sram_OpenSave() {
 
         default:
             // Use the saved entrance value with remember save location, except when in grottos/fairy fountains
-            if (CVarGetInteger(CVAR_ENHANCEMENT("RememberSaveLocation"), 1) &&
+            if (CVarGetInteger(CVAR_ENHANCEMENT("RememberSaveLocation"), 0) &&
                 gSaveContext.savedSceneNum != SCENE_FAIRYS_FOUNTAIN && gSaveContext.savedSceneNum != SCENE_GROTTOS) {
                 break;
             }
@@ -143,10 +142,6 @@ void Sram_OpenSave() {
                     (LINK_AGE_IN_YEARS == YEARS_CHILD) ? ENTR_LINKS_HOUSE_CHILD_SPAWN : ENTR_TEMPLE_OF_TIME_WARP_PAD;
             } else {
                 gSaveContext.entranceIndex = ENTR_LINKS_HOUSE_CHILD_SPAWN;
-            }
-            // SoH: "Play as Ganondorf", a file started at the Gerudo Fortress continues there instead of Link's house
-            if (gSaveContext.entranceIndex == ENTR_LINKS_HOUSE_CHILD_SPAWN) {
-                gSaveContext.entranceIndex = GanondorfStart_GetContinueEntrance(gSaveContext.entranceIndex);
             }
             break;
     }
@@ -276,12 +271,6 @@ void Sram_InitSave(FileChooseContext* fileChooseCtx) {
 
     if (IS_SPEEDRUN) {
         Speedrun_InitSaveFile(fileChooseCtx->speedrunIndex);
-    }
-
-    // SoH: "Play as Ganondorf", experiment: start at the Gerudo Fortress (plain files only)
-    if ((gSaveContext.ship.quest.id == QUEST_NORMAL || gSaveContext.ship.quest.id == QUEST_MASTER) && !IS_SPEEDRUN &&
-        (gSaveContext.cutsceneIndex == 0xFFF1)) {
-        GanondorfStart_InitNewSave();
     }
 
     Save_SaveFile();

@@ -230,11 +230,8 @@ void EnIshi_RandomizerInit(void* actorRef) {
     auto rockIdentity = IdentifyRock(gPlayState->sceneNum, (s16)actor->world.pos.x, (s16)actor->world.pos.z);
 
     if (Rock_RandomizerHoldsItem(rockIdentity, gPlayState, actor->params & 1) && rockActor->actor.draw != nullptr) {
-        bool isExcluded = Rando::Context::GetInstance()->GetItemLocation(rockIdentity.randomizerCheck)->IsExcluded();
         ObjectExtension::GetInstance().Set<CheckIdentity>(actor, std::move(rockIdentity));
-        if (!isExcluded) {
-            rockActor->actor.draw = EnIshi_RandomizerDraw;
-        }
+        rockActor->actor.draw = EnIshi_RandomizerDraw;
     }
 }
 
@@ -244,11 +241,8 @@ void ObjBombiwa_RandomizerInit(void* actorRef) {
     auto rockIdentity = IdentifyRock(gPlayState->sceneNum, (s16)actor->world.pos.x, (s16)actor->world.pos.z);
 
     if (Rock_RandomizerHoldsItem(rockIdentity, gPlayState, true) && rockActor->actor.draw != nullptr) {
-        bool isExcluded = Rando::Context::GetInstance()->GetItemLocation(rockIdentity.randomizerCheck)->IsExcluded();
         ObjectExtension::GetInstance().Set<CheckIdentity>(actor, std::move(rockIdentity));
-        if (!isExcluded) {
-            rockActor->actor.draw = ObjBombiwa_RandomizerDraw;
-        }
+        rockActor->actor.draw = ObjBombiwa_RandomizerDraw;
     }
 }
 
@@ -258,11 +252,8 @@ void ObjHamishi_RandomizerInit(void* actorRef) {
     auto rockIdentity = IdentifyRock(gPlayState->sceneNum, (s16)actor->world.pos.x, (s16)actor->world.pos.z);
 
     if (Rock_RandomizerHoldsItem(rockIdentity, gPlayState, true) && rockActor->actor.draw != nullptr) {
-        bool isExcluded = Rando::Context::GetInstance()->GetItemLocation(rockIdentity.randomizerCheck)->IsExcluded();
         ObjectExtension::GetInstance().Set<CheckIdentity>(actor, std::move(rockIdentity));
-        if (!isExcluded) {
-            rockActor->actor.draw = ObjHamishi_RandomizerDraw;
-        }
+        rockActor->actor.draw = ObjHamishi_RandomizerDraw;
     }
 }
 

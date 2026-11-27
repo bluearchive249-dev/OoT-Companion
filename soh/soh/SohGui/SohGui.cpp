@@ -5,6 +5,7 @@
 //  Created by David Chavez on 24.08.22.
 //
 
+#include "soh/Enhancements/Companions/Companions.h"
 #include <imgui.h>
 
 #include "SohGui.hpp"
@@ -22,10 +23,6 @@
 #include "soh/Enhancements/TimeDisplay/TimeDisplay.h"
 #include "soh/Enhancements/mod_menu.h"
 #include "soh/Network/Anchor/Anchor.h"
-#include "soh/Enhancements/ExtraModes/GanondorfInvasion.h"
-std::shared_ptr<Ship::GuiWindow> GdfSpawner_CreateWindow();
-std::shared_ptr<Ship::GuiWindow> Companions_CreateHudWindow();
-std::shared_ptr<Ship::GuiWindow> GdfMapEditor_CreateWindow();
 #include "soh/Enhancements/audio/AudioEditor.h"
 #include "soh/Enhancements/controls/InputViewer.h"
 #include "soh/Enhancements/cosmetics/CosmeticsEditor.h"
@@ -84,6 +81,7 @@ std::string GetWindowButtonText(const char* text, bool menuOpen) {
 
 std::shared_ptr<Ship::GuiWindow> mConsoleWindow;
 std::shared_ptr<SohStatsWindow> mStatsWindow;
+std::shared_ptr<Ship::GuiWindow> mCompanionsHud;
 std::shared_ptr<Ship::GuiWindow> mGfxDebuggerWindow;
 
 std::shared_ptr<SohMenu> mSohMenu;
@@ -115,10 +113,6 @@ std::shared_ptr<SohModalWindow> mModalWindow;
 std::shared_ptr<Notification::Window> mNotificationWindow;
 std::shared_ptr<TimeDisplayWindow> mTimeDisplayWindow;
 std::shared_ptr<AnchorRoomWindow> mAnchorRoomWindow;
-std::shared_ptr<Ship::GuiWindow> mGdfInvasionHud;
-std::shared_ptr<Ship::GuiWindow> mGdfSpawner;
-std::shared_ptr<Ship::GuiWindow> mGdfMapEditor;
-std::shared_ptr<Ship::GuiWindow> mCompanionsHud;
 
 UIWidgets::Colors GetMenuThemeColor() {
     return mSohMenu->GetMenuThemeColor();
@@ -196,6 +190,8 @@ void SetupGuiElements() {
 
     mStatsWindow = std::make_shared<SohStatsWindow>(CVAR_WINDOW("SohStats"), "Stats##Soh", ImVec2(400, 100));
     gui->AddGuiWindow(mStatsWindow);
+    mCompanionsHud = Companions_CreateHudWindow();
+    gui->AddGuiWindow(mCompanionsHud);
 
     /*mInputEditorWindow = gui->GetGuiWindow("Controller Configuration");
     if (mInputEditorWindow == nullptr) {
@@ -278,15 +274,6 @@ void SetupGuiElements() {
     gui->AddGuiWindow(mTimeDisplayWindow);
     mAnchorRoomWindow = std::make_shared<AnchorRoomWindow>(CVAR_WINDOW("AnchorRoom"), "Anchor Room");
     gui->AddGuiWindow(mAnchorRoomWindow);
-    mGdfInvasionHud = GdfInvasion_CreateHudWindow();
-    gui->AddGuiWindow(mGdfInvasionHud);
-    mCompanionsHud = Companions_CreateHudWindow();
-    gui->AddGuiWindow(mCompanionsHud);
-    mGdfSpawner = GdfSpawner_CreateWindow();
-    gui->AddGuiWindow(mGdfSpawner);
-    mGdfSpawner->Show();
-    mGdfMapEditor = GdfMapEditor_CreateWindow();
-    gui->AddGuiWindow(mGdfMapEditor);
 }
 
 void Destroy() {
@@ -315,6 +302,7 @@ void Destroy() {
     mModMenuWindow = nullptr;
     mAudioEditorWindow = nullptr;
     mStatsWindow = nullptr;
+    mCompanionsHud = nullptr;
     mConsoleWindow = nullptr;
     mGfxDebuggerWindow = nullptr;
     mInputViewer = nullptr;
@@ -324,10 +312,6 @@ void Destroy() {
     mPlandomizerWindow = nullptr;
     mTimeDisplayWindow = nullptr;
     mAnchorRoomWindow = nullptr;
-    mGdfInvasionHud = nullptr;
-    mCompanionsHud = nullptr;
-    mGdfSpawner = nullptr;
-    mGdfMapEditor = nullptr;
 }
 
 void RegisterPopup(std::string title, std::string message, std::string button1, std::string button2,

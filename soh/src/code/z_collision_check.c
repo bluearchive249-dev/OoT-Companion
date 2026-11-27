@@ -2,8 +2,6 @@
 #include "vt.h"
 #include "overlays/effects/ovl_Effect_Ss_HitMark/z_eff_ss_hitmark.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
-#include "overlays/actors/ovl_Boss_Ganon/z_boss_ganon.h"
-#include "soh/Enhancements/ExtraModes/PlayAsGanondorf.h"
 #include <assert.h>
 #include <libultraship/bridge/consolevariablebridge.h>
 
@@ -1726,11 +1724,7 @@ void CollisionCheck_SetBounce(Collider* at, Collider* ac) {
  */
 s32 CollisionCheck_SetATvsAC(PlayState* play, Collider* at, ColliderInfo* atInfo, Vec3f* atPos, Collider* ac,
                              ColliderInfo* acInfo, Vec3f* acPos, Vec3f* hitPos) {
-    // SoH: "Play as Ganondorf". His attacks go through every defense: they never bounce off hard parts like
-    // shields, armor or a Peahat's blades (enemies throw away the whole hit when something bounced).
-    u8 piercing = BossGanon_IsPlayerAttack(at->actor);
-
-    if (ac->acFlags & AC_HARD && at->actor != NULL && ac->actor != NULL && !piercing) {
+    if (ac->acFlags & AC_HARD && at->actor != NULL && ac->actor != NULL) {
         CollisionCheck_SetBounce(at, ac);
     }
     if (!(acInfo->bumperFlags & BUMP_NO_AT_INFO)) {
@@ -1754,10 +1748,8 @@ s32 CollisionCheck_SetATvsAC(PlayState* play, Collider* at, ColliderInfo* atInfo
     acInfo->bumper.hitPos.x = hitPos->x;
     acInfo->bumper.hitPos.y = hitPos->y;
     acInfo->bumper.hitPos.z = hitPos->z;
-    if ((!(atInfo->toucherFlags & TOUCH_AT_HITMARK) && ac->colType != COLTYPE_METAL && ac->colType != COLTYPE_WOOD &&
-         ac->colType != COLTYPE_HARD) ||
-        piercing) {
-        // Ganondorf always gets the plain hit flash, never the metal/wood "clink"
+    if (!(atInfo->toucherFlags & TOUCH_AT_HITMARK) && ac->colType != COLTYPE_METAL && ac->colType != COLTYPE_WOOD &&
+        ac->colType != COLTYPE_HARD) {
         acInfo->bumperFlags |= BUMP_DRAW_HITMARK;
     } else {
         CollisionCheck_HitEffects(play, at, atInfo, ac, acInfo, hitPos);
@@ -3000,47 +2992,6 @@ void CollisionCheck_SetInfoGetDamageTable(CollisionCheckInfo* info, s32 index, C
 /**
  * Apply AC damage effect
  */
-/**
- * SoH: "Play as Ganondorf". His attacks carry every damage type at once. Vanilla uses the highest set bit, which
- * would always be an unused entry, so instead pick the entry that suits him best among the types the target accepts:
- * the most damage from a plain hit, then from an elemental hit (fire/ice/light, only for targets that need one),
- * then a stun. Elemental entries come last so enemies don't burn, freeze or sparkle unless that's the only way to
- * hurt them.
- */
-static s32 CollisionCheck_GetGanondorfDamageEntry(DamageTable* tbl, u32 flags) {
-    s32 best = -1;
-    s32 bestScore = -1;
-    s32 i;
-
-    for (i = 0; i < 0x20; i++) {
-        if (flags & (1u << i)) {
-            s32 damage = tbl->table[i] & 0xF;
-            s32 effect = (tbl->table[i] >> 4) & 0xF;
-            s32 elemental = (effect == 2) || (effect == 3) || (effect == 4);
-            s32 group;
-            s32 score;
-
-            if ((damage > 0) && !elemental) {
-                group = 3;
-            } else if (damage > 0) {
-                group = 2;
-            } else if ((effect != 0) && !elemental) {
-                group = 1;
-            } else {
-                group = 0;
-            }
-
-            score = (group * 16) + damage;
-            if (score > bestScore) {
-                bestScore = score;
-                best = i;
-            }
-        }
-    }
-
-    return best;
-}
-
 void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCtx, Collider* collider,
                                 ColliderInfo* info) {
     DamageTable* tbl;
@@ -3049,69 +3000,31 @@ void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCt
     if (collider->actor == NULL || !(collider->acFlags & AC_HIT)) {
         return;
     }
-    // SoH: "Play as Ganondorf", his attacks also damage parts that normally can't be damaged
-    u8 piercing = BossGanon_IsPlayerAttack(collider->ac);
-
-    if (!(info->bumperFlags & BUMP_HIT) || ((info->bumperFlags & BUMP_NO_DAMAGE) && !piercing)) {
+    if (!(info->bumperFlags & BUMP_HIT) || info->bumperFlags & BUMP_NO_DAMAGE) {
         return;
     }
 
     assert(info->acHitInfo != NULL);
     tbl = collider->actor->colChkInfo.damageTable;
     if (tbl == NULL) {
-        damage = (f32)info->acHitInfo->toucher.damage - (piercing ? 0 : info->bumper.defense);
+        damage = (f32)info->acHitInfo->toucher.damage - info->bumper.defense;
         if (damage < 0) {
             damage = 0;
         }
-        // SoH: "Play as Ganondorf", between the Master Sword's 2 and the Biggoron Sword's 4 (Ganon: 4)
-        if (piercing) {
-            damage = (collider->ac->id == ACTOR_BOSS_GANON2) ? 4.0f : CLAMP(damage, 3.0f, 4.0f);
-        }
     } else {
-        s32 i = -1;
+        s32 i;
         u32 flags = info->acHitInfo->toucher.dmgFlags;
 
-        if (BossGanon_IsPlayerAttack(collider->ac)) {
-            i = CollisionCheck_GetGanondorfDamageEntry(tbl, flags & info->bumper.dmgFlags);
-        }
-
-        if (i < 0) {
-            for (i = 0; i < 0x20; i++, flags >>= 1) {
-                if (flags == 1) {
-                    break;
-                }
+        for (i = 0; i < 0x20; i++, flags >>= 1) {
+            if (flags == 1) {
+                break;
             }
         }
 
         damage = tbl->table[i] & 0xF;
         collider->actor->colChkInfo.damageEffect = tbl->table[i] >> 4 & 0xF;
-
-        // SoH: "Play as Ganondorf", his hits land between what the Master Sword and the Biggoron Sword would do to
-        // this target: Ganondorf halfway between the two, Ganon as hard as the Biggoron Sword. Targets that swords
-        // can't hurt keep the best of his other types.
-        if (piercing) {
-            s32 master = tbl->table[9] & 0xF;  // DMG_SLASH_MASTER
-            s32 giant = tbl->table[10] & 0xF;  // DMG_SLASH_GIANT
-
-            if ((master > 0) || (giant > 0)) {
-                s32 low = MAX(master, 1);
-                s32 high = MAX(giant, low);
-                s32 his = (collider->ac->id == ACTOR_BOSS_GANON2) ? high : (low + high + 1) / 2;
-
-                damage = his;
-                // ...and the target reacts as to a sword too: the entry picked for damage can carry a reaction the
-                // target treats as a block (an Iron Knuckle's armour shrugs off arrows, its 15-damage entry
-                // included, so he did nothing to it)
-                collider->actor->colChkInfo.damageEffect = (tbl->table[(master > 0) ? 9 : 10] >> 4) & 0xF;
-            }
-        }
     }
-    // Even targets that are immune to every type he carries take at least 1
-    if (piercing && (damage < 1.0f)) {
-        damage = 1.0f;
-    }
-
-    if (!(collider->acFlags & AC_HARD) || piercing) {
+    if (!(collider->acFlags & AC_HARD)) {
         collider->actor->colChkInfo.damage += damage;
     }
 
@@ -3728,11 +3641,7 @@ s32 CollisionCheck_CylSideVsLineSeg(f32 radius, f32 height, f32 offset, Vec3f* a
 u8 CollisionCheck_GetSwordDamage(s32 dmgFlags, PlayState* play) {
     u8 damage = 0;
 
-    // SoH: "Play as Ganondorf", his attacks carry every type, which read as the Kokiri Sword (1) here. Bosses take
-    // what the Master Sword (2) and the Biggoron Sword (4) would do: Ganondorf 3, Ganon 4.
-    if (((u32)dmgFlags & DMG_GANONDORF_PLAYER) == DMG_GANONDORF_PLAYER) {
-        damage = PlayAsGanondorf_IsGanonOut(play) ? 4 : 3;
-    } else if (dmgFlags & 0x00400100) {
+    if (dmgFlags & 0x00400100) {
         damage = 1;
     } else if (dmgFlags & 0x03000242) {
         damage = 2;
