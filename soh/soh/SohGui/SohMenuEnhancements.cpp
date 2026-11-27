@@ -1915,6 +1915,21 @@ void SohMenu::AddMenuEnhancements() {
             info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
         })
         .Options(CheckboxOptions().DefaultValue(true).Tooltip("Whether Zelda comes along."));
+    AddWidget(path, "Custom Models", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("Companions.CustomModels"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(CheckboxOptions().DefaultValue(true).Tooltip(
+            "Draw a girl with a custom Link-rigged model when one is installed in mods/ (a converted model for "
+            "her). She then moves with Link's own animations. Takes effect when she next appears."));
+    AddWidget(path, "Adult Malon Look: %d", WIDGET_CVAR_SLIDER_INT)
+        .CVar(CVAR_ENHANCEMENT("Companions.MalonAdultLook"))
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("Companions.Enabled"), 0) == 0;
+        })
+        .Options(IntSliderOptions().Min(0).Max(2).DefaultValue(0).Tooltip(
+            "Which of the custom model's adult Malon variants to use (when it has several)."));
     AddWidget(path, "Mixamo Motion", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("Companions.Mixamo"))
         .PreFunc([](WidgetInfo& info) {

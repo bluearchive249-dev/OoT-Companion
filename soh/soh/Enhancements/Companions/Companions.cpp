@@ -22,6 +22,7 @@
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <libultraship/bridge/consolevariablebridge.h>
+#include <libultraship/bridge/resourcebridge.h>
 #include <ship/Context.h>
 #include <ship/window/gui/GuiWindow.h>
 
@@ -959,6 +960,8 @@ static void LoadExtraLines() {
 
 // ---- The actor ----
 
+struct CompModel;
+
 enum CompState { ST_FOLLOW, ST_IDLE, ST_ATTACK, ST_SUPPORT, ST_HURT, ST_KO, ST_EMOTE, ST_TALK, ST_HUG };
 
 typedef struct {
@@ -1019,9 +1022,17 @@ typedef struct {
     f32 skirtScale, skirtVel;
     uint32_t skirtMask; // skirt limbs safe to widen (nothing but skirt hangs below them)
     u8 skirtChecked;
+    // A custom model (Link-rigged): its own copy of Link's skeleton playing Link's animations
+    CompModel* model;
+    SkelAnime modelBody;
+    SkelAnime modelSkel;
+    Vec3s bodyJoints[PLAYER_LIMB_BUF_COUNT];
+    Vec3s bodyMorph[PLAYER_LIMB_BUF_COUNT];
+    const char* bodyAnim;
 } Comp;
 
 static s16 sHugWho = -1;
+static CompModel* FindModel(int persona);
 
 static s16 sCompActorId = -1;
 static s16 sCuccoActorId = -1;
@@ -1472,6 +1483,15 @@ static void Comp_Init(Actor* thisx, PlayState* play) {
         c->puppetAnim = LINK_WALK;
     }
     c->bowClip = -1;
+    c->model = FindModel(c->persona);
+    if (c->model != nullptr) {
+        FlexSkeletonHeader* link = (FlexSkeletonHeader*)(c->adult ? "__OTR__objects/object_link_boy/gLinkAdultSkel"
+                                                                  : "__OTR__objects/object_link_child/gLinkChildSkel");
+        SkelAnime_InitLink(play, &c->modelBody, link, (LinkAnimationHeader*)LINK_WAIT, 9, c->bodyJoints, c->bodyMorph,
+                           PLAYER_LIMB_MAX);
+        LinkAnimation_PlayLoop(play, &c->modelBody, (LinkAnimationHeader*)LINK_WAIT);
+        c->bodyAnim = LINK_WAIT;
+    }
     sComp[c->who] = c;
 }
 
@@ -2074,6 +2094,91 @@ static void UpdateFace(Comp* c) {
     }
 }
 
+// ---- Custom models ----
+// A girl can be drawn with a Link-rigged model (converted from an OoT Online "zzplayas" model by
+// tools/zobj2o2r.py into a mod archive in mods/): under "companions/<persona>[_2|_3]" a skel blob, the display
+// lists, textures, eyes and mouths. Drawn on her own copy of Link's skeleton with Link's own animations.
+
+struct CompModel {
+    u8 tried, ok, dlCount;
+    StandardLimb limbs[21];
+    void* limbPtrs[21];
+    std::string eyes[8], mouths[4];
+};
+static std::map<std::string, CompModel> sModels;
+
+static u16 BE16(const u8* p) {
+    return (u16)((p[0] << 8) | p[1]);
+}
+static u32 BE32(const u8* p) {
+    return ((u32)p[0] << 24) | ((u32)p[1] << 16) | ((u32)p[2] << 8) | p[3];
+}
+
+static std::string ModelBase(int persona) {
+    std::string base = std::string("companions/") + sPersonaKey[persona];
+    if (persona == P_MALON_A) {
+        int v = CVarGetInteger(COMP_CVAR("MalonAdultLook"), 0);
+        if (v == 1) {
+            base += "_2";
+        } else if (v == 2) {
+            base += "_3";
+        }
+    }
+    return base;
+}
+
+static CompModel* FindModel(int persona) {
+    if (!CVarGetInteger(COMP_CVAR("CustomModels"), 1)) {
+        return nullptr;
+    }
+    std::string base = ModelBase(persona);
+    CompModel& m = sModels[base];
+    if (!m.tried) {
+        m.tried = 1;
+        std::string skelPath = base + "/skel";
+        if (ResourceGetSizeByName(skelPath.c_str()) == 0) {
+            return nullptr;
+        }
+        const u8* b = (const u8*)ResourceGetDataByName(skelPath.c_str());
+        if ((b == nullptr) || (b[0] != 'C') || (b[1] != 'M') || (b[2] != 'D') || (b[3] != 'L') || (b[4] != 21)) {
+            return nullptr;
+        }
+        m.dlCount = b[5];
+        for (int i = 0; i < 21; i++) {
+            const u8* l = b + 8 + i * 12;
+            StandardLimb& limb = m.limbs[i];
+            limb.jointPos.x = (s16)BE16(l);
+            limb.jointPos.y = (s16)BE16(l + 2);
+            limb.jointPos.z = (s16)BE16(l + 4);
+            limb.child = l[6];
+            limb.sibling = l[7];
+            u32 dl = BE32(l + 8);
+            limb.dList = nullptr;
+            if (dl != 0) {
+                char name[96];
+                snprintf(name, sizeof(name), "%s/dl_%06X", base.c_str(), (unsigned)dl);
+                limb.dList = (Gfx*)ResourceGetDataByName(name);
+            }
+            m.limbPtrs[i] = &limb;
+        }
+        for (int i = 0; i < 8; i++) {
+            m.eyes[i] = "__OTR__" + base + "/eye_" + std::to_string(i);
+        }
+        for (int i = 0; i < 4; i++) {
+            m.mouths[i] = "__OTR__" + base + "/mouth_" + std::to_string(i);
+        }
+        m.ok = 1;
+    }
+    return m.ok ? &m : nullptr;
+}
+
+static void ModelSkel(Comp* c) {
+    // (her model's limbs over the joints Link's animations write)
+    c->modelSkel = c->modelBody;
+    c->modelSkel.skeleton = c->model->limbPtrs;
+    c->modelSkel.limbCount = 22;
+}
+
 // ---- Mixamo motion ----
 
 static bool MixamoOn() {
@@ -2156,6 +2261,19 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
     if (!MixamoOn() || (c->rigState == 2)) {
         return;
     }
+    // With a custom model: Link's skeleton under her model, Link's own walk, the rig only for hugs and hands
+    SkelAnime* sk = &c->skel;
+    if (c->model != nullptr) {
+        ModelSkel(c);
+        sk = &c->modelSkel;
+        c->rig = sLinkRig;
+        c->rigState = 1;
+        c->skirtChecked = 1;
+        c->skirtMask = 0;
+        if (c->legLen <= 0.0f) {
+            c->legLen = CompRig_LegLength(sk, &c->rig);
+        }
+    }
     if (c->rigState == 0) {
         // Her bones: from the list, or from her shape
         c->rig = sRigMap[c->persona];
@@ -2169,7 +2287,7 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
     uint8_t* m = &c->rig.lThigh;
     const uint8_t* def = &sRigMap[c->persona].lThigh;
     CompRigMap found = c->rig;
-    for (int i = 0; i < 12; i++) {
+    for (int i = 0; (i < 12) && (c->model == nullptr); i++) {
         m[i] = (uint8_t)CompTuneAt(k.c_str(), i, (def[i] != 0) ? def[i] : (&found.lThigh)[i]);
     }
     if (!c->skirtChecked) {
@@ -2197,7 +2315,7 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
         }
     }
     if (c->legLen <= 0.0f) {
-        c->legLen = CompRig_LegLength(&c->skel, &c->rig);
+        c->legLen = CompRig_LegLength(sk, &c->rig);
         if (c->legLen <= 0.0f) {
             c->legLen = 2200.0f; // (no legs found: about a child's)
         }
@@ -2231,8 +2349,8 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
     } else {
         // Walking and running (and side steps hand in hand)
         f32 speed = ((c->holdSide != 0) && (c->holdWalk >= 0.0f)) ? c->holdWalk : fabsf(c->actor.speedXZ);
-        bool moving = !c->swimming && (c->state != ST_KO) && (c->state != ST_HUG) && (speed > 0.8f) &&
-                      (c->actor.bgCheckFlags & BGCHECKFLAG_GROUND);
+        bool moving = (c->model == nullptr) && !c->swimming && (c->state != ST_KO) && (c->state != ST_HUG) &&
+                      (speed > 0.8f) && (c->actor.bgCheckFlags & BGCHECKFLAG_GROUND);
         Math_ApproachF(&c->mixAmount, moving ? 1.0f : 0.0f, 0.35f, 0.12f);
         if (c->mixAmount <= 0.0f) {
             c->mixPhase = 0.0f;
@@ -2279,7 +2397,7 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
     if (c->mixAmount > 0.0f) {
         // (Malon's steps a little shorter: her skirt is long)
         f32 own = Tune((pk + ".mixamo_mix").c_str(), (c->who == COMP_MALON) ? 0.8f : 1.0f);
-        CompRig_Solve(&c->skel, &c->rig, &mix, c->mixAmount * Tune("mixamo_mix", 1.0f) * own, &c->rigOut);
+        CompRig_Solve(sk, &c->rig, &mix, c->mixAmount * Tune("mixamo_mix", 1.0f) * own, &c->rigOut);
         c->rigOut.rootDY *= Tune("mixamo_bob", 1.0f);
     }
     // Her skirt widens as her legs spread (how far apart the thighs point, front to back), springing a little
@@ -2302,13 +2420,13 @@ static void UpdateRig(PlayState* play, Comp* c, Player* player) {
     // A hug: both arms around him
     Math_ApproachF(&c->hugAmount, (c->state == ST_HUG) ? 1.0f : 0.0f, 0.3f, 0.15f);
     if (c->hugAmount > 0.0f) {
-        CompRig_SolveDirs(&c->skel, &c->rig, sHugDirs, sHugUse, c->hugAmount, &c->rigOut);
+        CompRig_SolveDirs(sk, &c->rig, sHugDirs, sHugUse, c->hugAmount, &c->rigOut);
     }
     // Hand in hand: her arm on his side reaches for his hand
     if ((c->holdSide != 0) && (c->state == ST_FOLLOW)) {
         Vec3f m = HoldMeetPoint(c, player);
         Vec3f local = WorldToModel(&c->actor, m);
-        CompRig_Reach(&c->skel, &c->rig, c->holdSide == 1, local.x, local.y, local.z, 1.0f, &c->rigOut);
+        CompRig_Reach(sk, &c->rig, c->holdSide == 1, local.x, local.y, local.z, 1.0f, &c->rigOut);
     }
 }
 
@@ -2349,6 +2467,24 @@ static void Comp_Update(Actor* thisx, PlayState* play) {
         c->cdSupport--;
     }
     SkelAnime_Update(&c->skel);
+    if (c->model != nullptr) {
+        // Her model moves with Link's own animations: standing, walking, running
+        f32 speed = ((c->holdSide != 0) && (c->holdWalk >= 0.0f)) ? c->holdWalk : fabsf(c->actor.speedXZ);
+        const char* want = LINK_WAIT;
+        f32 rate = 1.0f;
+        if (!c->swimming && (c->state != ST_KO) && (c->state != ST_HUG) && (speed > 0.8f)) {
+            want = (speed > Tune("run_above", 4.2f)) ? LINK_RUN : LINK_WALK;
+            rate = CLAMP(speed * ((want == LINK_RUN) ? Tune("model_run_rate", 0.18f) : Tune("model_walk_rate", 0.4f)),
+                         0.5f, 2.0f);
+        }
+        if (want != c->bodyAnim) {
+            c->bodyAnim = want;
+            LinkAnimation_Change(play, &c->modelBody, (LinkAnimationHeader*)want, 1.0f, 0.0f,
+                                 (f32)Animation_GetLastFrame((void*)want), ANIMMODE_LOOP, -6.0f);
+        }
+        c->modelBody.playSpeed = rate;
+        LinkAnimation_Update(play, &c->modelBody);
+    }
     UpdateFace(c);
     UpdateRig(play, c, player);
 
@@ -2615,6 +2751,19 @@ static s32 Comp_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Ve
     return false;
 }
 
+static s32 Comp_ModelOverride(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, void* thisx) {
+    Comp* c = (Comp*)thisx;
+    if ((limbIndex < 32) && (c->rigOut.mask & (1u << limbIndex))) {
+        rot->x = c->rigOut.rot[limbIndex][0];
+        rot->y = c->rigOut.rot[limbIndex][1];
+        rot->z = c->rigOut.rot[limbIndex][2];
+    }
+    if ((limbIndex == 1) && (c->rigOut.mask != 0)) {
+        pos->y += c->rigOut.rootDY;
+    }
+    return false;
+}
+
 static void Comp_Draw(Actor* thisx, PlayState* play) {
     Comp* c = (Comp*)thisx;
     const PersonaDef& d = Def(c);
@@ -2623,6 +2772,22 @@ static void Comp_Draw(Actor* thisx, PlayState* play) {
         return;
     }
     s16 eye = (c->eyeOverride >= 0) ? c->eyeOverride : c->eye;
+    if (c->model != nullptr) {
+        // Her model: Link's eye and mouth layout (open, half, closed; closed, open, half-open mouths)
+        static const int sMouth[3] = { 0, 2, 1 };
+        OPEN_DISPS(play->state.gfxCtx);
+        Gfx_SetupDL_25Opa(play->state.gfxCtx);
+        gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)c->model->eyes[CLAMP(eye, 0, 2)].c_str());
+        gSPSegment(POLY_OPA_DISP++, 0x09, (uintptr_t)c->model->mouths[sMouth[CLAMP(c->mouth, 0, 2)]].c_str());
+        gDPSetEnvColor(POLY_OPA_DISP++, (u8)CompTuneAt("companion.model_env", 0, 255.0f),
+                       (u8)CompTuneAt("companion.model_env", 1, 255.0f),
+                       (u8)CompTuneAt("companion.model_env", 2, 255.0f), 255);
+        CLOSE_DISPS(play->state.gfxCtx);
+        ModelSkel(c);
+        SkelAnime_DrawFlexOpa(play, c->model->limbPtrs, c->modelBody.jointTable, c->model->dlCount, Comp_ModelOverride,
+                              nullptr, thisx);
+        return;
+    }
     const char* eyeTex = d.eyes[CLAMP(eye, 0, 3)];
     const char* mouthTex = d.mouths[CLAMP(c->mouth, 0, 2)];
 
