@@ -980,6 +980,8 @@ typedef struct {
     u8 catchingUp, wandering;
     s8 holdSide; // holding Link's hand: 1 at his right, -1 at his left, 0 not
     s16 lookedCooldown, lookedFrames;
+    f32 bestDist;   // closest she's got to him on this catch-up
+    s16 noProgress; // frames without getting closer
     f32 holdWalk;
     s16 wanderTimer;
     Vec3f wanderGoal;
@@ -1848,7 +1850,12 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
     }
     Vec3f goal = c->actor.world.pos;
     f32 want = 0.0f;
-    f32 runSpeed = Tune("run_speed", 6.5f);
+    // She runs as fast as Link's top running speed (whatever it is: it's watched as he runs)
+    static f32 sLinkTop = 0.0f;
+    if ((player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && !(player->stateFlags1 & PLAYER_STATE1_ON_HORSE)) {
+        sLinkTop = std::max(sLinkTop, std::min(player->actor.speedXZ, 20.0f));
+    }
+    f32 runSpeed = std::max(Tune("run_speed", 6.0f), sLinkTop * Tune("run_match", 1.0f));
     f32 walkSpeed = Tune("walk_speed", 2.5f);
 
     if (c->catchingUp && !waitAtShore) {
@@ -1859,10 +1866,10 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
         if (toLink < nearDist + 25.0f) {
             c->catchingUp = 0;
             c->wanderTimer = Rand_S16Offset(40, 80);
-        } else if (toLink > leash * 1.6f) {
+        } else if (toLink > leash * 1.3f) {
             want = std::max(runSpeed, player->actor.speedXZ * 1.05f);
         } else {
-            want = std::max(walkSpeed * 1.4f, std::min(player->actor.speedXZ, runSpeed));
+            want = std::max(walkSpeed * 1.4f, std::min(std::max(player->actor.speedXZ, walkSpeed * 1.4f), runSpeed));
         }
     } else if (!waitAtShore) {
         if (c->wandering) {
@@ -1888,9 +1895,9 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
         s16 yaw = Math_Vec3f_Yaw(&c->actor.world.pos, &goal);
         Math_SmoothStepToS(&c->actor.world.rot.y, yaw, 3, 0x1800, 0x100);
         c->actor.shape.rot.y = c->actor.world.rot.y;
-    } else if (toLink < 300.0f) {
-        // Standing: turned toward him
-        Math_SmoothStepToS(&c->actor.shape.rot.y, c->actor.yawTowardsPlayer, 6, 0x600, 0x80);
+    } else if ((player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) && (toLink < 600.0f)) {
+        // Standing: she looks where she likes, but stares back when he looks around in first person
+        Math_SmoothStepToS(&c->actor.shape.rot.y, c->actor.yawTowardsPlayer, 4, 0x800, 0x80);
         c->actor.world.rot.y = c->actor.shape.rot.y;
     }
 
@@ -1904,13 +1911,27 @@ static void Follow(PlayState* play, Comp* c, Player* player) {
     } else {
         c->stuckTimer = 0;
     }
-    if (!waitAtShore && ((toLink > Tune("warp_distance", 650.0f)) ||
-                         (c->catchingUp && (c->stuckTimer > (s16)Tune("stuck_frames", 40.0f))) ||
-                         (c->actor.world.pos.y < player->actor.world.pos.y - 300.0f) ||
-                         ((c->actor.world.pos.y > player->actor.world.pos.y + 300.0f) &&
-                          (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND)))) {
+    // In the same area she never warps while she can get to him: she runs to him, and only if she gets no closer for
+    // a while (a wall, a gap, a ledge she can't climb) does she appear at his side. Or if she fell out of the world
+    f32 toLink3 = Actor_WorldDistXYZToActor(&c->actor, &player->actor);
+    if (c->catchingUp && !waitAtShore) {
+        if ((c->bestDist <= 0.0f) || (toLink3 < c->bestDist - Tune("progress_step", 8.0f))) {
+            c->bestDist = toLink3;
+            c->noProgress = 0;
+        } else {
+            c->noProgress++;
+        }
+    } else {
+        c->bestDist = 0.0f;
+        c->noProgress = 0;
+    }
+    bool fellOut = (c->actor.floorHeight <= BGCHECK_Y_MIN + 10.0f) && !(c->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
+                   (c->actor.world.pos.y < player->actor.world.pos.y - 400.0f);
+    if (!waitAtShore && (fellOut || (c->noProgress > (s16)(Tune("warp_after_seconds", 10.0f) * COMP_FPS)))) {
         if ((player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) || LinkSwimming(player)) {
             WarpToLink(play, c, player);
+            c->bestDist = 0.0f;
+            c->noProgress = 0;
         }
     }
 
