@@ -118,6 +118,14 @@ def convert(zf, base, path):
                     break
             elif op in (0xDA, 0xDC, 0xDB, 0x03) and seg == 6:
                 raise SystemExit('unsupported segment-6 command %08X %08X at %X in %s' % (w0, w1, p, path))
+            elif op in (0x01, 0xDA, 0xDE, 0xFD, 0xDC) and (0 < seg < 0x10):
+                # Other segments (eyes 8, mouth 9, limb matrices 0x0D): the port reads a segmented address only with
+                # its low bit set, as the game's own exported lists have it
+                out += struct.pack('>II', w0, w1 | 1)
+                if op == 0xFD:
+                    cur_tex = None
+                if op == 0xDE and (w0 >> 16) & 0xFF == 1:
+                    break
             else:
                 if cur_tex is not None:
                     off, tsiz, width = cur_tex
